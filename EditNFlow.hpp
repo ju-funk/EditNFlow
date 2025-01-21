@@ -21,16 +21,26 @@ public:
     void SetValue(T val)
     {
         Value = val;
-        CString str(_T("%llu"));
+        CString str;
 
         if constexpr (std::is_same_v<T, float>)
             str = _T("%.3f");
+        else
+            str = _T("%lli");
 
         myLastValidValue.Format(str, Value);
         SetLast();
     }
 
     T GetValue(void) { return Value; }
+
+    void DataExChg(CDataExchange* pDx, T& Val)
+    {
+        if(pDx->m_bSaveAndValidate)
+            Val = Value;
+        else
+            SetValue(Val);
+    }
 
     void SetLast(void)
     {
@@ -77,9 +87,9 @@ protected:
         val = _tcstof(_String, _EndPtr);
     }
 
-    void Convert(UINT64 &val, wchar_t const* _String, wchar_t** _EndPtr)
+    void Convert(LONGLONG &val, wchar_t const* _String, wchar_t** _EndPtr)
     {
-        val = _tcstoui64(_String, _EndPtr, 10);
+        val = _tcstoi64(_String, _EndPtr, 10);
     }
 
 
@@ -93,7 +103,6 @@ protected:
         case 0x0A:               // Shift+Enter (= linefeed)
         case VK_ESCAPE:
         case VK_TAB:
-        case '-':
             break;
 
         default:
@@ -111,12 +120,7 @@ protected:
     }
 
     DECLARE_MESSAGE_MAP()
-
-
-
-
-
-};      
+};
 
 
 //BEGIN_MESSAGE_MAP((CEditNFlow<T>), CEdit)
@@ -140,3 +144,7 @@ protected:
             ON_CONTROL_REFLECT(EN_UPDATE, OnUpdate)
             ON_WM_CHAR()
    END_MESSAGE_MAP()
+
+
+ void DDX_EditNFlow(CDataExchange * pDX, int nIDC, CWnd & rControl, float& value);
+ void DDX_EditNFlow(CDataExchange * pDX, int nIDC, CWnd & rControl, LONGLONG & value);
