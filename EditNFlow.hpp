@@ -15,7 +15,7 @@ public:
         myRejectingChange = false; 
         Value = 0;
         myLastSel = 0;
-        myLastValidValue = _T("");
+        myLastValidValue = _T("0");
     }
 
     void SetValue(T val)
@@ -25,8 +25,11 @@ public:
 
         if constexpr (std::is_same_v<T, float>)
             str = _T("%.3f");
-        else
+        else if constexpr (std::is_same_v<T, LONGLONG>)
             str = _T("%lli");
+        else
+            str = _T("%llu");
+
 
         myLastValidValue.Format(str, Value);
         SetLast();
@@ -64,6 +67,12 @@ protected:
         {
             CString aValue;
             GetWindowText(aValue);
+            if (aValue.IsEmpty())
+            {
+                aValue = _T("!");
+                myLastValidValue = _T("0");
+
+            }
             LPTSTR aEndPtr = nullptr;
 
             errno = 0;
@@ -92,6 +101,10 @@ protected:
         val = _tcstoi64(_String, _EndPtr, 10);
     }
 
+    void Convert(ULONGLONG &val, wchar_t const* _String, wchar_t** _EndPtr)
+    {
+        val = _tcstoui64(_String, _EndPtr, 10);
+    }
 
 
     void OnChar(UINT nChar, UINT nRepCnt, UINT nFlags)
@@ -108,8 +121,6 @@ protected:
         default:
 
             myLastSel = GetSel();
-
-            GetWindowText(myLastValidValue);
 
             break;
 
@@ -140,11 +151,17 @@ protected:
             static const AFX_MSGMAP_ENTRY _messageEntries[] =
         {
 
-
             ON_CONTROL_REFLECT(EN_UPDATE, OnUpdate)
             ON_WM_CHAR()
    END_MESSAGE_MAP()
 
 
- void DDX_EditNFlow(CDataExchange * pDX, int nIDC, CWnd & rControl, float& value);
- void DDX_EditNFlow(CDataExchange * pDX, int nIDC, CWnd & rControl, LONGLONG & value);
+template <class T>
+void DDX_EditNFlow(CDataExchange * pDX, int nIDC, CWnd & rControl, T & value)
+{
+    DDX_Control(pDX, nIDC, rControl);
+
+    ((CEditNFlow<T>*) & rControl)->DataExChg(pDX, value);
+}
+
+// void DDX_EditNFlow(CDataExchange * pDX, int nIDC, CWnd & rControl, LONGLONG & value);
