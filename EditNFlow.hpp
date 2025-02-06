@@ -1,3 +1,9 @@
+////////////////////////////////////////////////////////////////////////////////////////////////
+///// I have derived the basic framework from the CNumEdit class                              //
+///// WebPage: https://www.codeguru.com/cplusplus/creating-a-numeric-edit-box/                //
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 #pragma once
 #include "afxdialogex.h"
 #include <type_traits>
@@ -5,6 +11,11 @@
 #include "ViewSDR.h"
 
 
+//// T should be
+/////  - long          (not tested)
+/////  - ULONGLONG
+/////  - LONGLONG
+/////  - float
 template <class T>
 class CEditNFlow : public CEdit
 {
@@ -27,8 +38,10 @@ public:
             str = _T("%.3f");
         else if constexpr (std::is_same_v<T, LONGLONG>)
             str = _T("%lli");
-        else
+        else if constexpr (std::is_same_v<T, ULONGLONG>)
             str = _T("%llu");
+        else
+            str = _T("%li");    // fallback to long
 
 
         myLastValidValue.Format(str, Value);
@@ -91,21 +104,18 @@ protected:
         }
     }
 
-    void Convert(float &val, wchar_t const* _String, wchar_t** _EndPtr)
+    void Convert(T &val, wchar_t const* _String, wchar_t** _EndPtr)
     {
-        val = _tcstof(_String, _EndPtr);
-    }
+        if constexpr (std::is_same_v<T, float>)
+            val = _tcstof(_String, _EndPtr);
+        else if constexpr (std::is_same_v<T, LONGLONG>)
+            val = _tcstoi64(_String, _EndPtr, 10);
+        else if constexpr (std::is_same_v<T, ULONGLONG>)
+            val = _tcstoui64(_String, _EndPtr, 10);
+        else
+            val = _tstol(_String, _EndPtr, 10);
 
-    void Convert(LONGLONG &val, wchar_t const* _String, wchar_t** _EndPtr)
-    {
-        val = _tcstoi64(_String, _EndPtr, 10);
     }
-
-    void Convert(ULONGLONG &val, wchar_t const* _String, wchar_t** _EndPtr)
-    {
-        val = _tcstoui64(_String, _EndPtr, 10);
-    }
-
 
     void OnChar(UINT nChar, UINT nRepCnt, UINT nFlags)
     {
@@ -117,6 +127,10 @@ protected:
         case VK_ESCAPE:
         case VK_TAB:
             break;
+        case '-':
+            if (constexpr (std::is_same_v<T, ULONGLONG>) || 
+               constexpr (std::is_same_v<T, long>))
+                return;
 
         default:
 
