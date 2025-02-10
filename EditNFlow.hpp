@@ -16,7 +16,7 @@
 /////  - ULONGLONG
 /////  - LONGLONG
 /////  - float
-template <class T>
+template <class T, class P = nullptr_t>
 class CEditNFlow : public CEdit
 {
 public:
@@ -27,6 +27,7 @@ public:
         Value = 0;
         myLastSel = 0;
         myLastValidValue = _T("0");
+        Set_MinMax(Min, Max);
     }
 
     void SetValue(T val)
@@ -48,6 +49,12 @@ public:
         SetLast();
     }
 
+    void SetMinMax(T min, T max)
+    {
+        Min = min;
+        Max = Max;
+    }
+
     T GetValue(void) { return Value; }
 
     void DataExChg(CDataExchange* pDx, T& Val)
@@ -60,7 +67,6 @@ public:
 
     void SetLast(void)
     {
-
         myRejectingChange = true;
         SetWindowText(myLastValidValue);
         myRejectingChange = false;
@@ -68,10 +74,35 @@ public:
 
 
 protected:
-    typename T Value;
+    typename T Value, Min, Max;
     CString myLastValidValue;
     UINT myLastSel;
     bool myRejectingChange;
+
+private:
+    void Set_MinMax(T &Min, T &Max)
+    {
+        if constexpr (std::is_same_v<T, float>)
+        {
+            Min = FLT_MIN;
+            Max = FLT_MAX;
+        }
+        else if constexpr (std::is_same_v<T, LONGLONG>)
+        {
+            Min = MINLONGLONG;
+            Max = MAXLONGLONG;
+        }
+        else if constexpr (std::is_same_v<T, ULONGLONG>)
+        {
+            Min = 0;
+            Max = MAXULONGLONG;
+        }
+        else
+         {
+            Min = MINLONG;
+            Max = MAXLONG;
+        }
+    }
 
 protected:
     void OnUpdate()
@@ -96,6 +127,14 @@ protected:
             {
                 myLastValidValue = aValue;
             }
+            else if (Value < Min)
+            {
+                SetValue(Min);
+            }
+            else if (Value > Max)
+            {
+                SetValue(Max);
+            }
             else
             {
                 SetLast();
@@ -114,7 +153,6 @@ protected:
             val = _tcstoui64(_String, _EndPtr, 10);
         else
             val = _tstol(_String, _EndPtr, 10);
-
     }
 
     void OnChar(UINT nChar, UINT nRepCnt, UINT nFlags)
@@ -129,9 +167,10 @@ protected:
             break;
         case '-':
             if (constexpr (std::is_same_v<T, ULONGLONG>) || 
-               constexpr (std::is_same_v<T, long>))
+                constexpr (std::is_same_v<T, long>))
                 return;
 
+            [[fallthrough]]; // fallthrough is explicit
         default:
 
             myLastSel = GetSel();
@@ -144,21 +183,30 @@ protected:
 
     }
 
+    void OnLButtonDblClk(UINT nFlags, CPoint point)
+    {
+        CEdit::OnLButtonDblClk(nFlags, point);
+
+        if constexpr (!(std::is_same_v<P, nullptr_t>))
+            ((P*)GetParent())->ENFLButtonDblClk(this); 
+    }
+
+
     DECLARE_MESSAGE_MAP()
 };
 
 
 //BEGIN_MESSAGE_MAP((CEditNFlow<T>), CEdit)
     PTM_WARNING_DISABLE 
-        template <class T>
-    const AFX_MSGMAP* CEditNFlow<T>::GetMessageMap() const
+        template <class T, class P>
+    const AFX_MSGMAP* CEditNFlow<T, P>::GetMessageMap() const
     {
         return GetThisMessageMap();
     }
-    template <class T>
-    const AFX_MSGMAP* PASCAL CEditNFlow<T>::GetThisMessageMap()
+    template <class T, class P>
+    const AFX_MSGMAP* PASCAL CEditNFlow<T, P>::GetThisMessageMap()
     {
-        typedef CEditNFlow<T> ThisClass;
+        typedef CEditNFlow<T, P> ThisClass;
         typedef CEdit TheBaseClass;
         __pragma(warning(push))
             __pragma(warning(disable: 4640)) /* message maps can only be called by single threaded message pump */
@@ -167,7 +215,11 @@ protected:
 
             ON_CONTROL_REFLECT(EN_UPDATE, OnUpdate)
             ON_WM_CHAR()
+            ON_WM_LBUTTONDBLCLK()
    END_MESSAGE_MAP()
+
+
+
 
 
 template <class T>
@@ -178,4 +230,5 @@ void DDX_EditNFlow(CDataExchange * pDX, int nIDC, CWnd & rControl, T & value)
     ((CEditNFlow<T>*) & rControl)->DataExChg(pDX, value);
 }
 
-// void DDX_EditNFlow(CDataExchange * pDX, int nIDC, CWnd & rControl, LONGLONG & value);
+
+
