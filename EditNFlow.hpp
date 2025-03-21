@@ -23,10 +23,10 @@ public:
 
     CEditNFlow() 
     {
-        myRejectingChange = false; 
+        myRejectingChange = setNul = false;
         Value = 0;
         myLastSel = 0;
-        myLastValidValue = _T("0");
+        myLastValidValue = _T("");
         Set_MinMax(Min, Max);
     }
 
@@ -44,7 +44,6 @@ public:
         else
             str = _T("%li");    // fallback to long
 
-
         myLastValidValue.Format(str, Value);
         SetLast();
     }
@@ -52,7 +51,7 @@ public:
     void SetMinMax(T min, T max)
     {
         Min = min;
-        Max = Max;
+        Max = max;
     }
 
     T GetValue(void) { return Value; }
@@ -61,25 +60,32 @@ public:
     {
         if(pDx->m_bSaveAndValidate)
             Val = Value;
-        else
+        else if(Val != Value || myLastValidValue.IsEmpty())
             SetValue(Val);
-    }
-
-    void SetLast(void)
-    {
-        myRejectingChange = true;
-        SetWindowText(myLastValidValue);
-        myRejectingChange = false;
     }
 
 
 protected:
     typename T Value, Min, Max;
     CString myLastValidValue;
-    UINT myLastSel;
-    bool myRejectingChange;
+    DWORD myLastSel;
+    bool myRejectingChange, setNul;
 
 private:
+    void SetLast(void)
+    {
+        if(setNul)
+            myLastSel = 0x00010001;
+        else
+            myLastSel = GetSel();
+        setNul = false;
+        myRejectingChange = true;
+        SetWindowText(myLastValidValue);
+        myRejectingChange = false;
+        SetSel(myLastSel);
+    }
+
+
     void Set_MinMax(T &Min, T &Max)
     {
         if constexpr (std::is_same_v<T, float>)
@@ -114,32 +120,29 @@ protected:
             if (aValue.IsEmpty())
             {
                 aValue = _T("!");
+                Value = 0;
                 myLastValidValue = _T("0");
-
+                setNul = true;
             }
+
             LPTSTR aEndPtr = nullptr;
 
             errno = 0;
 
-            Convert(Value, aValue, &aEndPtr);
+            T value;
+            Convert(value, aValue, &aEndPtr);
 
             if (!(*aEndPtr) && errno != ERANGE)
             {
-                myLastValidValue = aValue;
-            }
-            else if (Value < Min)
-            {
-                SetValue(Min);
-            }
-            else if (Value > Max)
-            {
-                SetValue(Max);
+                if (value < Min)
+                    SetValue(Min);
+                else if (value > Max)
+                    SetValue(Max);
+                else
+                    SetValue(value);
             }
             else
-            {
-                SetLast();
-                SetSel(myLastSel);
-            }
+                SetValue(Value);
         }
     }
 
@@ -165,22 +168,22 @@ protected:
         case VK_ESCAPE:
         case VK_TAB:
             break;
+        case '.':
+        case ',':
+            nChar = '.';
+            if constexpr (!std::is_same_v<T, float>)
+                return;
+            break;
         case '-':
-            if (constexpr (std::is_same_v<T, ULONGLONG>) || 
-                constexpr (std::is_same_v<T, long>))
+            if constexpr (std::is_same_v<T, ULONGLONG>) 
                 return;
 
             [[fallthrough]]; // fallthrough is explicit
         default:
-
-            myLastSel = GetSel();
-
             break;
-
         }
 
         CEdit::OnChar(nChar, nRepCnt, nFlags);
-
     }
 
     void OnLButtonDblClk(UINT nFlags, CPoint point)
@@ -191,32 +194,30 @@ protected:
             ((P*)GetParent())->ENFLButtonDblClk(this); 
     }
 
-
     DECLARE_MESSAGE_MAP()
 };
 
 
 //BEGIN_MESSAGE_MAP((CEditNFlow<T>), CEdit)
-    PTM_WARNING_DISABLE 
-        template <class T, class P>
-    const AFX_MSGMAP* CEditNFlow<T, P>::GetMessageMap() const
+PTM_WARNING_DISABLE 
+template <class T, class P>
+const AFX_MSGMAP* CEditNFlow<T, P>::GetMessageMap() const
+{
+    return GetThisMessageMap();
+}
+template <class T, class P>
+const AFX_MSGMAP* PASCAL CEditNFlow<T, P>::GetThisMessageMap()
+{
+    typedef CEditNFlow<T, P> ThisClass;
+    typedef CEdit TheBaseClass;
+    __pragma(warning(push))
+    __pragma(warning(disable: 4640)) /* message maps can only be called by single threaded message pump */
+    static const AFX_MSGMAP_ENTRY _messageEntries[] =
     {
-        return GetThisMessageMap();
-    }
-    template <class T, class P>
-    const AFX_MSGMAP* PASCAL CEditNFlow<T, P>::GetThisMessageMap()
-    {
-        typedef CEditNFlow<T, P> ThisClass;
-        typedef CEdit TheBaseClass;
-        __pragma(warning(push))
-            __pragma(warning(disable: 4640)) /* message maps can only be called by single threaded message pump */
-            static const AFX_MSGMAP_ENTRY _messageEntries[] =
-        {
-
-            ON_CONTROL_REFLECT(EN_UPDATE, OnUpdate)
-            ON_WM_CHAR()
-            ON_WM_LBUTTONDBLCLK()
-   END_MESSAGE_MAP()
+        ON_CONTROL_REFLECT(EN_UPDATE, OnUpdate)
+        ON_WM_CHAR()
+        ON_WM_LBUTTONDBLCLK()
+END_MESSAGE_MAP()
 
 
 
