@@ -11,40 +11,77 @@
 #include "ViewSDR.h"
 
 
-//// T should be
-/////  - long          (not tested)
-/////  - ULONGLONG
-/////  - LONGLONG
-/////  - float
-template <class T, class P = nullptr_t>
+/* 
+   T should be
+    - long          (not tested)
+    - ULONGLONG
+    - LONGLONG
+    - float
+
+   snoValue = show no Value
+    - false -> only show Values
+    - true  -> when not set show default '---'
+
+   P send right Mouse Click to this class
+*/
+template <class T, bool snoValue = false, class P = nullptr_t>
 class CEditNFlow : public CEdit
 {
 public:
 
     CEditNFlow() 
     {
-        myRejectingChange = setNul = false;
+        myRejectingChange = setReset = false;
+        if constexpr (snoValue)
+        {
+            noValue = ValueSet = true;
+            notSet = _T("---");
+        }
+        else
+        {
+            noValue = ValueSet = false;
+            notSet = _T("");
+        }
+
         Value = 0;
         myLastSel = 0;
-        myLastValidValue = _T("");
+        myLastValidValue = notSet;
         Set_MinMax(Min, Max);
     }
 
-    void SetValue(T val)
+    enum ShowState {DoNothing, SetView, ShowNoVal};
+    void SetValue(T val, ShowState ShSa = DoNothing)
     {
         Value = val;
-        CString str;
+        switch (ShSa)
+        {
+        case DoNothing:
+            break;
+        case SetView:
+            noValue = false;
+            break;
+        case ShowNoVal:
+            Value = 0;
+            myLastValidValue = notSet;
+            noValue = ValueSet;
+            break;
+        }
 
-        if constexpr (std::is_same_v<T, float>)
-            str = _T("%.3f");
-        else if constexpr (std::is_same_v<T, LONGLONG>)
-            str = _T("%lli");
-        else if constexpr (std::is_same_v<T, ULONGLONG>)
-            str = _T("%llu");
-        else
-            str = _T("%li");    // fallback to long
+        if (!noValue)
+        {
+            CString str;
 
-        myLastValidValue.Format(str, Value);
+            if constexpr (std::is_same_v<T, float>)
+                str = _T("%.3f");
+            else if constexpr (std::is_same_v<T, LONGLONG>)
+                str = _T("%lli");
+            else if constexpr (std::is_same_v<T, ULONGLONG>)
+                str = _T("%llu");
+            else
+                str = _T("%li");    // fallback to long
+
+            myLastValidValue.Format(str, Value);
+        }
         SetLast();
     }
 
@@ -58,27 +95,48 @@ public:
 
     void DataExChg(CDataExchange* pDx, T& Val)
     {
-        if(pDx->m_bSaveAndValidate)
-            Val = Value;
-        else if(Val != Value || myLastValidValue.IsEmpty())
-            SetValue(Val);
+        bool read = false;
+        ShowState ss = DoNothing;
+        switch (pDx->m_bSaveAndValidate)
+        {
+        case 0:
+            break;
+        case 1:
+            read = false;
+            break;
+        case 2:
+            ss = SetView;
+            break;
+        case 3:
+            ss = ShowNoVal;
+            break;
+        }
+
+        if(read)
+            if(noValue)
+                Val = 0;
+            else
+                Val = Value;
+        else if(Val != Value || myLastValidValue == notSet)
+            SetValue(Val, ss);
     }
 
 
 protected:
     typename T Value, Min, Max;
-    CString myLastValidValue;
+    CString myLastValidValue, notSet;
     DWORD myLastSel;
-    bool myRejectingChange, setNul;
+    bool myRejectingChange, noValue, 
+         setReset, ValueSet;
 
 private:
     void SetLast(void)
     {
-        if(setNul)
-            myLastSel = 0x00010001;
+        if(setReset)
+            myLastSel = noValue ? 0x10000000 : 0x00010001;
         else
             myLastSel = GetSel();
-        setNul = false;
+        setReset = noValue;
         myRejectingChange = true;
         SetWindowText(myLastValidValue);
         myRejectingChange = false;
@@ -119,10 +177,9 @@ protected:
             GetWindowText(aValue);
             if (aValue.IsEmpty())
             {
-                aValue = _T("!");
-                Value = 0;
-                myLastValidValue = _T("0");
-                setNul = true;
+                setReset = true;
+                SetValue(Value, ShowNoVal);
+                return;
             }
 
             LPTSTR aEndPtr = nullptr;
@@ -135,14 +192,14 @@ protected:
             if (!(*aEndPtr) && errno != ERANGE)
             {
                 if (value < Min)
-                    SetValue(Min);
+                    SetValue(Min, SetView);
                 else if (value > Max)
-                    SetValue(Max);
+                    SetValue(Max, SetView);
                 else
-                    SetValue(value);
+                    SetValue(value, SetView);
             }
             else
-                SetValue(Value);
+                SetValue(Value, SetView);
         }
     }
 
@@ -186,12 +243,27 @@ protected:
         CEdit::OnChar(nChar, nRepCnt, nFlags);
     }
 
+    afx_msg void OnEnSetfocus()
+    {
+        if (noValue)
+        {
+            myLastValidValue = _T("");
+            SetLast();
+        }
+    }
+
+    afx_msg void OnEnKillfocus()
+    {
+        if (noValue)
+            SetValue(Value, ShowNoVal);
+    }
+
     void OnLButtonDblClk(UINT nFlags, CPoint point)
     {
         CEdit::OnLButtonDblClk(nFlags, point);
 
         if constexpr (!(std::is_same_v<P, nullptr_t>))
-            ((P*)GetParent())->ENFLButtonDblClk(this); 
+            ((P*)GetParent())->ENFLButtonDblClk(this, nFlags, point);
     }
 
     DECLARE_MESSAGE_MAP()
@@ -200,21 +272,23 @@ protected:
 
 //BEGIN_MESSAGE_MAP((CEditNFlow<T>), CEdit)
 PTM_WARNING_DISABLE 
-template <class T, class P>
-const AFX_MSGMAP* CEditNFlow<T, P>::GetMessageMap() const
+template <class T, bool snoValue = false, class P>
+const AFX_MSGMAP* CEditNFlow<T, snoValue, P>::GetMessageMap() const
 {
     return GetThisMessageMap();
 }
-template <class T, class P>
-const AFX_MSGMAP* PASCAL CEditNFlow<T, P>::GetThisMessageMap()
+template <class T, bool snoValue = false, class P>
+const AFX_MSGMAP* PASCAL CEditNFlow<T, snoValue, P>::GetThisMessageMap()
 {
-    typedef CEditNFlow<T, P> ThisClass;
+    typedef CEditNFlow<T, snoValue, P> ThisClass;
     typedef CEdit TheBaseClass;
     __pragma(warning(push))
     __pragma(warning(disable: 4640)) /* message maps can only be called by single threaded message pump */
     static const AFX_MSGMAP_ENTRY _messageEntries[] =
     {
         ON_CONTROL_REFLECT(EN_UPDATE, OnUpdate)
+        ON_CONTROL_REFLECT(EN_SETFOCUS, OnEnSetfocus)
+        ON_CONTROL_REFLECT(EN_KILLFOCUS, OnEnKillfocus)
         ON_WM_CHAR()
         ON_WM_LBUTTONDBLCLK()
 END_MESSAGE_MAP()
