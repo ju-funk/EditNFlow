@@ -49,6 +49,10 @@ public:
         Set_MinMax(Min, Max);
     }
 
+    CEditNFlow(CEditNFlow const&) = delete;
+    CEditNFlow& operator=(CEditNFlow other)  = delete;
+
+
     enum ShowState {DoNothing, SetView, ShowNoVal};
     void SetValue(T val, ShowState ShSa = DoNothing)
     {
@@ -91,34 +95,36 @@ public:
         Max = max;
     }
 
-    T GetValue(void) { return Value; }
+    T GetValue(void) { return Value;}
 
-    void DataExChg(CDataExchange* pDx, T& Val)
+    explicit operator bool() const
     {
-        bool read = false;
-        ShowState ss = DoNothing;
-        switch (pDx->m_bSaveAndValidate)
-        {
-        case 0:
-            break;
-        case 1:
-            read = false;
-            break;
-        case 2:
-            ss = SetView;
-            break;
-        case 3:
-            ss = ShowNoVal;
-            break;
-        }
+         return !noValue;
+    }
 
-        if(read)
-            if(noValue)
-                Val = 0;
-            else
-                Val = Value;
-        else if(Val != Value || myLastValidValue == notSet)
-            SetValue(Val, ss);
+    bool operator !() const
+    {
+         return noValue;
+    }
+
+    bool operator =(bool val)
+    {
+        assert(val == false);
+        SetValue(0, ShowNoVal);
+        return val;
+    }
+
+    T operator =(T val) 
+    {
+        SetValue(val, SetView);
+        return Value;
+    }
+
+
+    void DataExChg(CDataExchange* pDx)
+    {
+        if (!pDx->m_bSaveAndValidate)
+            SetLast();
     }
 
 
@@ -130,17 +136,26 @@ protected:
          setReset, ValueSet;
 
 private:
-    void SetLast(void)
+    void SetLast(bool reset = false)
     {
-        if(setReset)
-            myLastSel = noValue ? 0x10000000 : 0x00010001;
-        else
-            myLastSel = GetSel();
-        setReset = noValue;
-        myRejectingChange = true;
-        SetWindowText(myLastValidValue);
-        myRejectingChange = false;
-        SetSel(myLastSel);
+        if (::IsWindow(m_hWnd))
+        {
+            if (reset)
+                myLastValidValue = _T("");
+            else
+            {
+                if (setReset)
+                    myLastSel = noValue ? 0x10000000 : 0x00010001;
+                else
+                    myLastSel = myLastValidValue == notSet ? 0x10000000 : GetSel();
+                setReset = noValue;
+            }
+            myRejectingChange = true;
+            SetWindowText(myLastValidValue);
+            myRejectingChange = false;
+            if (!reset)
+                SetSel(myLastSel);
+        }
     }
 
 
@@ -212,26 +227,40 @@ protected:
         else if constexpr (std::is_same_v<T, ULONGLONG>)
             val = _tcstoui64(_String, _EndPtr, 10);
         else
-            val = _tstol(_String, _EndPtr, 10);
+            val = wcstoul(_String, _EndPtr, 10);
     }
 
-    void OnChar(UINT nChar, UINT nRepCnt, UINT nFlags)
+    afx_msg void OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
     {
         switch (nChar)
         {
         case VK_BACK:
+        case VK_DELETE:
+        case VK_LEFT:
+        case VK_RIGHT:
+        case VK_UP:
+        case VK_DOWN:
+        case VK_END:
+        case VK_HOME:
+            if (noValue)
+            {
+                SetLast(true);
+                return;
+            }
+            break;
+            
         case VK_RETURN:
         case 0x0A:               // Shift+Enter (= linefeed)
         case VK_ESCAPE:
         case VK_TAB:
             break;
-        case '.':
-        case ',':
-            nChar = '.';
+        case VK_OEM_PERIOD:
+        case VK_OEM_COMMA:
+            nChar = VK_OEM_PERIOD;
             if constexpr (!std::is_same_v<T, float>)
                 return;
             break;
-        case '-':
+        case VK_OEM_MINUS:
             if constexpr (std::is_same_v<T, ULONGLONG>) 
                 return;
 
@@ -240,8 +269,9 @@ protected:
             break;
         }
 
-        CEdit::OnChar(nChar, nRepCnt, nFlags);
+        CEdit::OnKeyDown(nChar, nRepCnt, nFlags);
     }
+
 
     afx_msg void OnEnSetfocus()
     {
@@ -272,12 +302,12 @@ protected:
 
 //BEGIN_MESSAGE_MAP((CEditNFlow<T>), CEdit)
 PTM_WARNING_DISABLE 
-template <class T, bool snoValue = false, class P>
+template <class T, bool snoValue, class P>
 const AFX_MSGMAP* CEditNFlow<T, snoValue, P>::GetMessageMap() const
 {
     return GetThisMessageMap();
 }
-template <class T, bool snoValue = false, class P>
+template <class T, bool snoValue, class P>
 const AFX_MSGMAP* PASCAL CEditNFlow<T, snoValue, P>::GetThisMessageMap()
 {
     typedef CEditNFlow<T, snoValue, P> ThisClass;
@@ -289,21 +319,18 @@ const AFX_MSGMAP* PASCAL CEditNFlow<T, snoValue, P>::GetThisMessageMap()
         ON_CONTROL_REFLECT(EN_UPDATE, OnUpdate)
         ON_CONTROL_REFLECT(EN_SETFOCUS, OnEnSetfocus)
         ON_CONTROL_REFLECT(EN_KILLFOCUS, OnEnKillfocus)
-        ON_WM_CHAR()
+        ON_WM_KEYDOWN()
         ON_WM_LBUTTONDBLCLK()
 END_MESSAGE_MAP()
 
 
 
-
-
-template <class T>
-void DDX_EditNFlow(CDataExchange * pDX, int nIDC, CWnd & rControl, T & value)
+template <class T, bool snoValue, class P>
+void DDX_EditNFlow(CDataExchange * pDX, int nIDC, CEditNFlow<T, snoValue, P> & rControl)
 {
-    DDX_Control(pDX, nIDC, rControl);
+    DDX_Control(pDX, nIDC, static_cast<CWnd&>(rControl));
 
-    ((CEditNFlow<T>*) & rControl)->DataExChg(pDX, value);
+    rControl.DataExChg(pDX);
 }
-
 
 
