@@ -45,54 +45,25 @@ public:
 
         Value = 0;
         myLastSel = 0;
+        MenuRes = MenuSub = 0;
         myLastValidValue = notSet;
+        pCurrEditMenu = nullptr;
         Set_MinMax(Min, Max);
-    }
-
-    CEditNFlow(CEditNFlow const&) = delete;
-    CEditNFlow& operator=(CEditNFlow other)  = delete;
-
-
-    enum ShowState {DoNothing, SetView, ShowNoVal};
-    void SetValue(T val, ShowState ShSa = DoNothing)
-    {
-        Value = val;
-        switch (ShSa)
-        {
-        case DoNothing:
-            break;
-        case SetView:
-            noValue = false;
-            break;
-        case ShowNoVal:
-            Value = 0;
-            myLastValidValue = notSet;
-            noValue = ValueSet;
-            break;
-        }
-
-        if (!noValue)
-        {
-            CString str;
-
-            if constexpr (std::is_same_v<T, float>)
-                str = _T("%.3f");
-            else if constexpr (std::is_same_v<T, LONGLONG>)
-                str = _T("%lli");
-            else if constexpr (std::is_same_v<T, ULONGLONG>)
-                str = _T("%llu");
-            else
-                str = _T("%li");    // fallback to long
-
-            myLastValidValue.Format(str, Value);
-        }
-        SetLast();
     }
 
     void SetMinMax(T min, T max)
     {
         Min = min;
         Max = max;
+    }
+
+    void SetContextMenu(int menuRes, int menuSub, CWnd **pCurrEdit = nullptr)
+    {
+        MenuRes = menuRes;
+        MenuSub = menuSub;
+        pCurrEditMenu = pCurrEdit;
+        if(pCurrEditMenu != nullptr)
+            *pCurrEditMenu = nullptr;
     }
 
     T GetValue(void) { return Value;}
@@ -134,8 +105,51 @@ protected:
     DWORD myLastSel;
     bool myRejectingChange, noValue, 
          setReset, ValueSet;
+    int MenuRes, MenuSub;
+    CWnd** pCurrEditMenu;
 
 private:
+    CEditNFlow(CEditNFlow const&) = delete;
+    CEditNFlow& operator=(CEditNFlow other) = delete;
+
+
+    enum ShowState { DoNothing, SetView, ShowNoVal };
+    void SetValue(T val, ShowState ShSa = DoNothing)
+    {
+        Value = val;
+        switch (ShSa)
+        {
+        case DoNothing:
+            break;
+        case SetView:
+            noValue = false;
+            break;
+        case ShowNoVal:
+            Value = 0;
+            myLastValidValue = notSet;
+            noValue = ValueSet;
+            break;
+        }
+
+        if (!noValue)
+        {
+            CString str;
+
+            if constexpr (std::is_same_v<T, float>)
+                str = _T("%.3f");
+            else if constexpr (std::is_same_v<T, LONGLONG>)
+                str = _T("%lli");
+            else if constexpr (std::is_same_v<T, ULONGLONG>)
+                str = _T("%llu");
+            else
+                str = _T("%li");    // fallback to long
+
+            myLastValidValue.Format(str, Value);
+        }
+        SetLast();
+    }
+
+
     void SetLast(bool reset = false)
     {
         if (::IsWindow(m_hWnd))
@@ -230,8 +244,16 @@ protected:
             val = wcstoul(_String, _EndPtr, 10);
     }
 
+    bool IsEdit()
+    {
+        return (GetStyle() & ES_READONLY) == 0 && IsWindowEnabled();
+    }
+
     afx_msg void OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
     {
+        if(!IsEdit())
+            return;
+
         switch (nChar)
         {
         case VK_BACK:
@@ -275,7 +297,7 @@ protected:
 
     afx_msg void OnEnSetfocus()
     {
-        if (noValue)
+        if (noValue && IsEdit())
         {
             myLastValidValue = _T("");
             SetLast();
@@ -284,16 +306,85 @@ protected:
 
     afx_msg void OnEnKillfocus()
     {
-        if (noValue)
+        if (noValue && IsEdit())
             SetValue(Value, ShowNoVal);
     }
 
-    void OnLButtonDblClk(UINT nFlags, CPoint point)
+    afx_msg void OnLButtonDblClk(UINT nFlags, CPoint point)
     {
         CEdit::OnLButtonDblClk(nFlags, point);
 
         if constexpr (!(std::is_same_v<P, nullptr_t>))
             ((P*)GetParent())->ENFLButtonDblClk(this, nFlags, point);
+    }
+
+    afx_msg void OnRButtonDown(UINT nFlags, CPoint point)
+    {
+        if (MenuRes > 0)
+        {
+            CMenu men;
+            men.LoadMenuW(MenuRes);
+            CMenu* pmen = men.GetSubMenu(MenuSub);
+
+            if(pCurrEditMenu != nullptr)
+                *pCurrEditMenu = dynamic_cast<CWnd*>(this);
+
+            DisableItems(pmen);
+
+            ClientToScreen(&point);
+            int Id = pmen->TrackPopupMenu(TPM_LEFTALIGN | TPM_RETURNCMD | TPM_NONOTIFY, point.x, point.y, GetParent());
+
+            if(Id > 0)
+                GetParent()->OnCmdMsg(Id, 0, NULL, NULL);
+
+            if(pCurrEditMenu != nullptr)
+                *pCurrEditMenu = nullptr;
+        }
+        else
+            CEdit::OnRButtonDown(nFlags, point);
+    }
+
+
+    void DisableItems(CMenu* pMenu)
+    {
+        ENSURE_VALID(pMenu);
+
+        // check the enabled state of various menu items
+
+        CCmdUI state;
+        state.m_pMenu = pMenu;
+
+        state.m_nIndexMax = pMenu->GetMenuItemCount();
+        for (state.m_nIndex = 0; state.m_nIndex < state.m_nIndexMax;
+            state.m_nIndex++)
+        {
+            state.m_nID = pMenu->GetMenuItemID(state.m_nIndex);
+            if (state.m_nID == 0)
+                continue; // menu separator or invalid cmd - ignore it
+
+            ASSERT(state.m_pOther == NULL);
+            ASSERT(state.m_pMenu != NULL);
+            if (state.m_nID == (UINT)-1)
+            {
+                // possibly a popup menu, route to first item of that popup
+                state.m_pSubMenu = pMenu->GetSubMenu(state.m_nIndex);
+                if (state.m_pSubMenu == NULL ||
+                    (state.m_nID = state.m_pSubMenu->GetMenuItemID(0)) == 0 ||
+                    state.m_nID == (UINT)-1)
+                {
+                    continue;       // first item of popup can't be routed to
+                }
+                state.DoUpdate(GetParent(), FALSE);    // popups are never auto disabled
+            }
+            else
+            {
+                // normal menu item
+                // Auto enable/disable if frame window has 'm_bAutoMenuEnable'
+                //    set and command is _not_ a system command.
+                state.m_pSubMenu = NULL;
+                state.DoUpdate(GetParent(), state.m_nID < 0xF000);
+            }
+        }
     }
 
     DECLARE_MESSAGE_MAP()
@@ -321,6 +412,7 @@ const AFX_MSGMAP* PASCAL CEditNFlow<T, snoValue, P>::GetThisMessageMap()
         ON_CONTROL_REFLECT(EN_KILLFOCUS, OnEnKillfocus)
         ON_WM_KEYDOWN()
         ON_WM_LBUTTONDBLCLK()
+        ON_WM_RBUTTONDOWN()
 END_MESSAGE_MAP()
 
 
@@ -328,7 +420,7 @@ END_MESSAGE_MAP()
 template <class T, bool snoValue, class P>
 void DDX_EditNFlow(CDataExchange * pDX, int nIDC, CEditNFlow<T, snoValue, P> & rControl)
 {
-    DDX_Control(pDX, nIDC, static_cast<CWnd&>(rControl));
+    DDX_Control(pDX, nIDC, dynamic_cast<CWnd&>(rControl));
 
     rControl.DataExChg(pDX);
 }
