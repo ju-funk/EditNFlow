@@ -21,10 +21,8 @@
    snoValue = show no Value
     - false -> only show Values
     - true  -> when not set show default '---'
-
-   P send right Mouse Click to this class
 */
-template <class T, bool snoValue = false, class P = nullptr_t>
+template <class T, bool snoValue = false>
 class CEditNFlow : public CEdit
 {
 public:
@@ -47,24 +45,53 @@ public:
         myLastSel = 0;
         MenuRes = MenuSub = 0;
         myLastValidValue = notSet;
-        pCurrEditMenu = nullptr;
+        pCurrEdit = nullptr;
+        bSendMouseMsgs = false;
         Set_MinMax(Min, Max);
     }
 
+    /*
+    *   Set Min Max Value
+    */
     void SetMinMax(T min, T max)
     {
         Min = min;
         Max = max;
     }
 
-    void SetContextMenu(int menuRes, int menuSub, CWnd **pCurrEdit = nullptr)
+    /*
+    * When Mouse Right Click can set the own Context-Menu
+    * 
+    *   it is not indepent with SendMouseMsgs
+    * 
+    *    - menuRes : int ID for the Resource Menu
+    *    - menuSub : int ID for the Submenu of the 
+    *                Resource Menu
+    */
+    void SetContextMenu(int menuRes, int menuSub)
     {
         MenuRes = menuRes;
         MenuSub = menuSub;
-        pCurrEditMenu = pCurrEdit;
-        if(pCurrEditMenu != nullptr)
-            *pCurrEditMenu = nullptr;
     }
+
+    /*
+    *   Send the Mouse Message to Parent-Dialog,
+    *   Set Variable for the Current CEditNFlow-Object
+    *    - On
+    *       true  : send Mouse Messages to the Parent Window
+    *       false : not Send Mouse Messages to Parent Window
+    *    - pcurrEdit
+    *       When a Mouse or a Context-Menu-Message send to
+    *       Parent Window, this Varible has the Sending 
+    *       CEditNFlow-Object, when needed
+    */
+    void SendMouseMsgs(bool On = true, CWnd **pcurrEdit = nullptr)
+    {
+        bSendMouseMsgs = On;
+        pCurrEdit = pcurrEdit;
+        SetCurrCtrl();
+    }
+
 
     T GetValue(void) { return Value;}
 
@@ -106,7 +133,8 @@ protected:
     bool myRejectingChange, noValue, 
          setReset, ValueSet;
     int MenuRes, MenuSub;
-    CWnd** pCurrEditMenu;
+    CWnd** pCurrEdit;
+    bool bSendMouseMsgs;
 
 private:
     CEditNFlow(CEditNFlow const&) = delete;
@@ -249,6 +277,12 @@ protected:
         return (GetStyle() & ES_READONLY) == 0 && IsWindowEnabled();
     }
 
+    void SetCurrCtrl(CWnd* This = nullptr)
+    {
+        if (pCurrEdit != nullptr)
+            *pCurrEdit = dynamic_cast<CWnd*>(This);
+    }
+
     afx_msg void OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
     {
         if(!IsEdit())
@@ -310,14 +344,6 @@ protected:
             SetValue(Value, ShowNoVal);
     }
 
-    afx_msg void OnLButtonDblClk(UINT nFlags, CPoint point)
-    {
-        CEdit::OnLButtonDblClk(nFlags, point);
-
-        if constexpr (!(std::is_same_v<P, nullptr_t>))
-            ((P*)GetParent())->ENFLButtonDblClk(this, nFlags, point);
-    }
-
     afx_msg void OnRButtonDown(UINT nFlags, CPoint point)
     {
         if (MenuRes > 0)
@@ -326,8 +352,7 @@ protected:
             men.LoadMenuW(MenuRes);
             CMenu* pmen = men.GetSubMenu(MenuSub);
 
-            if(pCurrEditMenu != nullptr)
-                *pCurrEditMenu = dynamic_cast<CWnd*>(this);
+            SetCurrCtrl(this);
 
             DisableItems(pmen);
 
@@ -337,12 +362,26 @@ protected:
             if(Id > 0)
                 GetParent()->OnCmdMsg(Id, 0, NULL, NULL);
 
-            if(pCurrEditMenu != nullptr)
-                *pCurrEditMenu = nullptr;
+            SetCurrCtrl();
         }
         else
             CEdit::OnRButtonDown(nFlags, point);
     }
+
+    virtual BOOL OnWndMsg(UINT message, WPARAM wParam, LPARAM lParam, LRESULT* pResult)
+    {
+        if (bSendMouseMsgs && (m_hWnd != nullptr) &&
+            ((WM_MOUSEFIRST <= message) && (WM_MOUSELAST >= message)) )
+        {
+            SetCurrCtrl(this);
+
+            GetParent()->SendMessage(message, wParam, lParam);
+
+            SetCurrCtrl();
+        }
+        return CEdit::OnWndMsg(message, wParam, lParam, pResult);
+    }
+
 
 
     void DisableItems(CMenu* pMenu)
@@ -393,15 +432,15 @@ protected:
 
 //BEGIN_MESSAGE_MAP((CEditNFlow<T>), CEdit)
 PTM_WARNING_DISABLE 
-template <class T, bool snoValue, class P>
-const AFX_MSGMAP* CEditNFlow<T, snoValue, P>::GetMessageMap() const
+template <class T, bool snoValue>
+const AFX_MSGMAP* CEditNFlow<T, snoValue>::GetMessageMap() const
 {
     return GetThisMessageMap();
 }
-template <class T, bool snoValue, class P>
-const AFX_MSGMAP* PASCAL CEditNFlow<T, snoValue, P>::GetThisMessageMap()
+template <class T, bool snoValue>
+const AFX_MSGMAP* PASCAL CEditNFlow<T, snoValue>::GetThisMessageMap()
 {
-    typedef CEditNFlow<T, snoValue, P> ThisClass;
+    typedef CEditNFlow<T, snoValue> ThisClass;
     typedef CEdit TheBaseClass;
     __pragma(warning(push))
     __pragma(warning(disable: 4640)) /* message maps can only be called by single threaded message pump */
@@ -411,14 +450,13 @@ const AFX_MSGMAP* PASCAL CEditNFlow<T, snoValue, P>::GetThisMessageMap()
         ON_CONTROL_REFLECT(EN_SETFOCUS, OnEnSetfocus)
         ON_CONTROL_REFLECT(EN_KILLFOCUS, OnEnKillfocus)
         ON_WM_KEYDOWN()
-        ON_WM_LBUTTONDBLCLK()
         ON_WM_RBUTTONDOWN()
 END_MESSAGE_MAP()
 
 
 
-template <class T, bool snoValue, class P>
-void DDX_EditNFlow(CDataExchange * pDX, int nIDC, CEditNFlow<T, snoValue, P> & rControl)
+template <class T, bool snoValue>
+void DDX_EditNFlow(CDataExchange * pDX, int nIDC, CEditNFlow<T, snoValue> & rControl)
 {
     DDX_Control(pDX, nIDC, dynamic_cast<CWnd&>(rControl));
 
