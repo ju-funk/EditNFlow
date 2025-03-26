@@ -11,6 +11,113 @@
 #include "ViewSDR.h"
 
 
+///////////////////////////////////////////////////////////////////////////////////////////
+//  template Class CValidValue
+//  Handling tristate of a Value T
+//    it should be a valid Value or
+//    no Value is set, in this case 
+//    the Value is not valid
+///////////////////////////////////////////////////////////////////////////////////////////
+template <class T>
+class CVaildValue
+{
+public:
+    CVaildValue()
+    {
+        ValueVaild = true;
+        Value      = 0;
+    }
+
+/* 
+    *   Get only the current value back
+    *    - return T
+
+    *     no test for vaild value, see next operator
+    */
+    T GetVal(void) { return Value; }
+
+    /*
+    *   Get the state is value vaild
+    *    - return
+    *        true  : value is valid
+    *        false : value is not vaild
+    */
+    explicit operator bool() const
+    {
+        return ValueVaild;
+    }
+
+    /*
+    *   Get the state is not value vaild
+    *    - return
+    *        false : value is vaild
+    *        true  : vaild is not value
+    */
+    bool operator !() const
+    {
+        return !ValueVaild;
+    }
+
+    /*
+    *   Change valid value 
+    *    - val
+    *        true  : set to no vaild value
+    *        false : is forbitten, see next operator
+    */
+    bool operator =(bool val)
+    {
+        assert(val == true);
+        SetValue(0, !val);
+        return val;
+    }
+
+    /*
+    *   Set Value to vaild value
+    *    - val
+    *         set vaild value
+    */
+    T operator =(T val)
+    {
+        SetValue(val, true);
+        return Value;
+    }
+
+    /*
+    *   CAST Get only the current value back
+    *    - return T
+
+    *     no test for vaild value
+    */
+    explicit operator T()
+    {
+        return Value;
+    }
+
+
+protected:
+    typename T Value;
+    bool  ValueVaild;
+
+
+protected:
+    virtual void SetValue(T val, bool ShowState)
+    {
+        Value = val;
+        ValueVaild = ShowState;
+        if (!ShowState)
+            Value = 0;
+    }
+
+};
+
+
+///////////////////////////////////////////////////////////////////////////////////////////
+//  template Class CEditNFlow
+// 
+//  CEdit class expand to handling with different Value types
+//    and tristate of the value see above
+///////////////////////////////////////////////////////////////////////////////////////////
+
 /* 
    T should be
     - long          (not tested)
@@ -18,35 +125,34 @@
     - LONGLONG
     - float
 
-   snoValue = show no Value
-    - false -> only show Values
-    - true  -> when no value set show default '---'
+   ShNotValue = show not Value
+    - false -> show Values
+    - true  -> when no vaild value, set show to '---'
 */
-template <class T, bool snoValue = false>
-class CEditNFlow : public CEdit
+template <class T, bool ShNotValue = false>
+class CEditNFlow : public CEdit, public CVaildValue<T>
 {
 public:
 
-    CEditNFlow() 
+    CEditNFlow() : CVaildValue()
     {
-        myRejectingChange = setReset = false;
-        if constexpr (snoValue)
+        if constexpr (ShNotValue)
         {
-            noValue = ValueSet = true;
+            ValueVaild = ValueSet = false;
             notSet = _T("---");
         }
         else
         {
-            noValue = ValueSet = false;
+            ValueVaild = ValueSet = true;
             notSet = _T("");
         }
 
-        Value = 0;
+        myRejectingChange = setReset =
+        bSendMouseMsgs = false;
         myLastSel = 0;
         MenuRes = MenuSub = 0;
         myLastValidValue = notSet;
-        pCurrEdit = nullptr;
-        bSendMouseMsgs = false;
+        pCurrentCtl = nullptr;
         Set_MinMax(Min, Max);
     }
 
@@ -85,65 +191,12 @@ public:
     *       Parent Window, this Varible has the Sending 
     *       CEditNFlow-Object, when needed
     */
-    void SendMouseMsgs(bool On = true, CWnd **pcurrEdit = nullptr)
+    template <class TT, bool BT>
+    void SendMouseMsgs(bool On = true, CEditNFlow<TT, BT>** pCurrEdit = nullptr)
     {
         bSendMouseMsgs = On;
-        pCurrEdit = pcurrEdit;
+        pCurrentCtl = reinterpret_cast<CEditNFlow<T, ShNotValue>**>(pCurrEdit);
         SetCurrCtrl();
-    }
-
-    /*
-    *   Get the current value back
-    *    - return T
-               
-    *     no test for no value is set
-    */
-    T GetValue(void) { return Value;}
-
-    /*
-    *   Get the state of no value is set
-    *    - return
-    *        true  : value is set
-    *        false : no value is set
-    */
-    explicit operator bool() const
-    {
-         return !noValue;
-    }
-
-    /*
-    *   Get the state of no value is set
-    *    - return
-    *        false : value is set
-    *        true  : no value is set
-    */
-    bool operator !() const
-    {
-         return noValue;
-    }
-
-    /*
-    *   Set Value to no value set
-    *    - val 
-    *        false : set to no vaild value
-    *        true  : is forbitten
-    */
-    bool operator =(bool val)
-    {
-        assert(val == false);
-        SetValue(0, ShowNoVal);
-        return val;
-    }
-
-    /*
-    *   Set Value to vaild value
-    *    - val 
-    *         set vaild value
-    */
-    T operator =(T val) 
-    {
-          SetValue(val, SetView);
-          return Value;
     }
 
     /*
@@ -156,15 +209,19 @@ public:
             SetLast();
     }
 
+    /*
+    *  Using the operator= 
+    *     from base class CVaildValue
+    */
+    using CVaildValue<T>::operator=;
 
 protected:
-    typename T Value, Min, Max;
+    typename T Min, Max;
     CString myLastValidValue, notSet;
     DWORD myLastSel;
-    bool myRejectingChange, noValue, 
-         setReset, ValueSet;
+    bool myRejectingChange, setReset, ValueSet;
     int MenuRes, MenuSub;
-    CWnd** pCurrEdit;
+    CEditNFlow<T, ShNotValue>** pCurrentCtl;
     bool bSendMouseMsgs;
 
 private:
@@ -172,25 +229,17 @@ private:
     CEditNFlow& operator=(CEditNFlow other) = delete;
 
 
-    enum ShowState { DoNothing, SetView, ShowNoVal };
-    void SetValue(T val, ShowState ShSa = DoNothing)
+    virtual void SetValue(T val, bool ShowState) override
     {
-        Value = val;
-        switch (ShSa)
+        CVaildValue::SetValue(val, ShowState);
+
+        if (!ShowState)
         {
-        case DoNothing:
-            break;
-        case SetView:
-            noValue = false;
-            break;
-        case ShowNoVal:
-            Value = 0;
             myLastValidValue = notSet;
-            noValue = ValueSet;
-            break;
+            ValueVaild = ValueSet;
         }
 
-        if (!noValue)
+        if (ValueVaild)
         {
             CString str;
 
@@ -218,10 +267,10 @@ private:
             else
             {
                 if (setReset)
-                    myLastSel = noValue ? 0x10000000 : 0x00010001;
+                    myLastSel = !ValueVaild ? 0x10000000 : 0x00010001;
                 else
                     myLastSel = myLastValidValue == notSet ? 0x10000000 : GetSel();
-                setReset = noValue;
+                setReset = !ValueVaild;
             }
             myRejectingChange = true;
             SetWindowText(myLastValidValue);
@@ -266,7 +315,7 @@ protected:
             if (aValue.IsEmpty())
             {
                 setReset = true;
-                SetValue(Value, ShowNoVal);
+                SetValue(Value, false);
                 return;
             }
 
@@ -280,14 +329,14 @@ protected:
             if (!(*aEndPtr) && errno != ERANGE)
             {
                 if (value < Min)
-                    SetValue(Min, SetView);
+                    SetValue(Min, true);
                 else if (value > Max)
-                    SetValue(Max, SetView);
+                    SetValue(Max, true);
                 else
-                    SetValue(value, SetView);
+                    SetValue(value, true);
             }
             else
-                SetValue(Value, SetView);
+                SetValue(Value, true);
         }
     }
 
@@ -308,10 +357,10 @@ protected:
         return (GetStyle() & ES_READONLY) == 0 && IsWindowEnabled();
     }
 
-    void SetCurrCtrl(CWnd* This = nullptr)
+    void SetCurrCtrl(CEditNFlow<T, ShNotValue>* This = nullptr)
     {
-        if (pCurrEdit != nullptr)
-            *pCurrEdit = dynamic_cast<CWnd*>(This);
+        if (pCurrentCtl != nullptr)
+            *pCurrentCtl = This;
     }
 
     afx_msg void OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
@@ -329,7 +378,7 @@ protected:
         case VK_DOWN:
         case VK_END:
         case VK_HOME:
-            if (noValue)
+            if (!ValueVaild)
             {
                 SetLast(true);
                 return;
@@ -362,17 +411,14 @@ protected:
 
     afx_msg void OnEnSetfocus()
     {
-        if (noValue && IsEdit())
-        {
-            myLastValidValue = _T("");
-            SetLast();
-        }
+        if (!ValueVaild && IsEdit())
+            SetLast(true);
     }
 
     afx_msg void OnEnKillfocus()
     {
-        if (noValue && IsEdit())
-            SetValue(Value, ShowNoVal);
+        if (!ValueVaild && IsEdit())
+            SetValue(Value, false);
     }
 
     afx_msg void OnRButtonDown(UINT nFlags, CPoint point)
@@ -461,17 +507,17 @@ protected:
 };
 
 
-//BEGIN_MESSAGE_MAP((CEditNFlow<T, snoValue>), CEdit)
+//BEGIN_MESSAGE_MAP((CEditNFlow<T, ShNotValue>), CEdit)
 PTM_WARNING_DISABLE 
-template <class T, bool snoValue>
-const AFX_MSGMAP* CEditNFlow<T, snoValue>::GetMessageMap() const
+template <class T, bool ShNotValue>
+const AFX_MSGMAP* CEditNFlow<T, ShNotValue>::GetMessageMap() const
 {
     return GetThisMessageMap();
 }
-template <class T, bool snoValue>
-const AFX_MSGMAP* PASCAL CEditNFlow<T, snoValue>::GetThisMessageMap()
+template <class T, bool ShNotValue>
+const AFX_MSGMAP* PASCAL CEditNFlow<T, ShNotValue>::GetThisMessageMap()
 {
-    typedef CEditNFlow<T, snoValue> ThisClass;
+    typedef CEditNFlow<T, ShNotValue> ThisClass;
     typedef CEdit TheBaseClass;
     __pragma(warning(push))
     __pragma(warning(disable: 4640)) /* message maps can only be called by single threaded message pump */
@@ -492,8 +538,8 @@ END_MESSAGE_MAP()
 *    - nIDC     : Resource ID
 *    - rControl : Control variable
 */
-template <class T, bool snoValue>
-void DDX_EditNFlow(CDataExchange * pDX, int nIDC, CEditNFlow<T, snoValue> & rControl)
+template <class T, bool ShNotValue>
+void DDX_EditNFlow(CDataExchange * pDX, int nIDC, CEditNFlow<T, ShNotValue> & rControl)
 {
     DDX_Control(pDX, nIDC, dynamic_cast<CWnd&>(rControl));
 
