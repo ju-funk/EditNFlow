@@ -20,7 +20,7 @@
 
    snoValue = show no Value
     - false -> only show Values
-    - true  -> when not set show default '---'
+    - true  -> when no value set show default '---'
 */
 template <class T, bool snoValue = false>
 class CEditNFlow : public CEdit
@@ -51,7 +51,7 @@ public:
     }
 
     /*
-    *   Set Min Max Value
+    *   Set Min Max values
     */
     void SetMinMax(T min, T max)
     {
@@ -60,7 +60,7 @@ public:
     }
 
     /*
-    * When Mouse Right Click can set the own Context-Menu
+    * By Mouse Right Click, can set the own Context-Menu
     * 
     *   it is not indepent with SendMouseMsgs
     * 
@@ -92,19 +92,42 @@ public:
         SetCurrCtrl();
     }
 
-
+    /*
+    *   Get the current value back
+    *    - return T
+               
+    *     no test for no value is set
+    */
     T GetValue(void) { return Value;}
 
+    /*
+    *   Get the state of no value is set
+    *    - return
+    *        true  : value is set
+    *        false : no value is set
+    */
     explicit operator bool() const
     {
          return !noValue;
     }
 
+    /*
+    *   Get the state of no value is set
+    *    - return
+    *        false : value is set
+    *        true  : no value is set
+    */
     bool operator !() const
     {
          return noValue;
     }
 
+    /*
+    *   Set Value to no value set
+    *    - val 
+    *        false : set to no vaild value
+    *        true  : is forbitten
+    */
     bool operator =(bool val)
     {
         assert(val == false);
@@ -112,13 +135,21 @@ public:
         return val;
     }
 
+    /*
+    *   Set Value to vaild value
+    *    - val 
+    *         set vaild value
+    */
     T operator =(T val) 
     {
-        SetValue(val, SetView);
-        return Value;
+          SetValue(val, SetView);
+          return Value;
     }
 
-
+    /*
+    *   The Value is always the current
+    *     but update the view
+    */
     void DataExChg(CDataExchange* pDx)
     {
         if (!pDx->m_bSaveAndValidate)
@@ -368,7 +399,7 @@ protected:
             CEdit::OnRButtonDown(nFlags, point);
     }
 
-    virtual BOOL OnWndMsg(UINT message, WPARAM wParam, LPARAM lParam, LRESULT* pResult)
+    virtual BOOL OnWndMsg(UINT message, WPARAM wParam, LPARAM lParam, LRESULT* pResult)  override
     {
         if (bSendMouseMsgs && (m_hWnd != nullptr) &&
             ((WM_MOUSEFIRST <= message) && (WM_MOUSELAST >= message)) )
@@ -430,7 +461,7 @@ protected:
 };
 
 
-//BEGIN_MESSAGE_MAP((CEditNFlow<T>), CEdit)
+//BEGIN_MESSAGE_MAP((CEditNFlow<T, snoValue>), CEdit)
 PTM_WARNING_DISABLE 
 template <class T, bool snoValue>
 const AFX_MSGMAP* CEditNFlow<T, snoValue>::GetMessageMap() const
@@ -455,6 +486,12 @@ END_MESSAGE_MAP()
 
 
 
+/*
+*   Connect the Control to Resource ID
+*    - pDX      : from MFC
+*    - nIDC     : Resource ID
+*    - rControl : Control variable
+*/
 template <class T, bool snoValue>
 void DDX_EditNFlow(CDataExchange * pDX, int nIDC, CEditNFlow<T, snoValue> & rControl)
 {
