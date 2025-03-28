@@ -234,20 +234,7 @@ protected:
     CEditNFlow<T, ShNotValue>** pCurrentCtl;
     bool bSendMouseMsgs;
     TCHAR TousSep, FlowSep, DefFloSep;
-    enum { My_Copy = 35000, My_Paste };
-    struct tDblClk
-    {
-        tDblClk() : nFlags{ 0 }, Point{ CPoint() } {}
-
-        void Set(UINT nflags, CPoint point)
-        { 
-            nFlags = nflags;
-            Point = point;
-        }
-
-        UINT   nFlags;
-        CPoint Point;
-    } sDblClk;
+    enum { My_Copy = 35000, My_Paste, My_SetNoValid };
 
 private:
     CEditNFlow(CEditNFlow const&) = delete;
@@ -579,11 +566,13 @@ protected:
 
     afx_msg void OnRButtonDown(UINT nFlags, CPoint point)
     {
-        sDblClk.Set(nFlags, point);
-        SetTimer(1, GetDoubleClickTime(), nullptr);
+        if((nFlags & MK_CONTROL) == MK_CONTROL)
+            SetNoValid(nFlags, point);
+        else
+            ShowContextMenu(point);
     }
 
-    afx_msg void OnRButtonDblClk(UINT nFlags, CPoint point)
+    void SetNoValid(UINT nFlags, CPoint point)
     {
         KillTimer(1);
         
@@ -615,18 +604,8 @@ protected:
         return CEdit::OnWndMsg(message, wParam, lParam, pResult);
     }
 
-    afx_msg void OnTimer(UINT_PTR nIDEvent)
-    {
-        if (nIDEvent == 1)
-        {
-            KillTimer(1); 
 
-            ShowContextMenu();
-        }
-    }
-
-
-    void ShowContextMenu()
+    void ShowContextMenu(CPoint point)
     {
         CMenu SubMenu, cMenu;
 
@@ -647,23 +626,26 @@ protected:
 
 
         // menue-item: copy
+        UINT ix = 0; 
         UINT nFlags = MF_BYPOSITION | MF_STRING | (ValueVaild ? 0 : MF_GRAYED | MF_DISABLED);
-        SubMenu.InsertMenu(0, nFlags, My_Copy, _T("Copy"));
+        SubMenu.InsertMenu(ix++, nFlags, My_Copy, _T("Copy"));
      
         // menue-item: paste
         nFlags = MF_BYPOSITION | MF_STRING |( IsPaste() ? 0 : MF_GRAYED | MF_DISABLED);
-        SubMenu.InsertMenu(1, nFlags, My_Paste, _T("Paste"));
+        SubMenu.InsertMenu(ix++, nFlags, My_Paste, _T("Paste"));
      
+        if (!NoVaildValueSet)
+        {
+            nFlags = MF_BYPOSITION | MF_STRING | (ValueVaild ? 0 : MF_GRAYED | MF_DISABLED);
+            SubMenu.InsertMenu(ix++, nFlags, My_SetNoValid, _T("Set to No Value\tCTL-Right-Mouse"));
+        }
+
         nFlags = MF_BYPOSITION | MF_SEPARATOR;
-        SubMenu.InsertMenu(2, nFlags);
+        SubMenu.InsertMenu(ix++, nFlags);
 
 
-        //SubMenu.AppendMenu(ValueVaild ? MF_STRING : MF_GRAYED | MF_DISABLED | MF_STRING, My_Copy, _T("Copy"));
-        //SubMenu.AppendMenu(IsPaste() ? MF_STRING : MF_GRAYED | MF_DISABLED | MF_STRING, My_Paste, _T("Paste"));
-
-
-        ClientToScreen(&sDblClk.Point);
-        int Id = SubMenu.TrackPopupMenu(TPM_LEFTALIGN | TPM_RETURNCMD | TPM_NONOTIFY, sDblClk.Point.x, sDblClk.Point.y, GetParent());
+        ClientToScreen(&point);
+        int Id = SubMenu.TrackPopupMenu(TPM_LEFTALIGN | TPM_RETURNCMD | TPM_NONOTIFY, point.x, point.y, GetParent());
         switch (Id)
         {
         case 0:
@@ -673,6 +655,9 @@ protected:
             break;
         case My_Paste:
             EditPaste();
+            break;
+        case My_SetNoValid:
+            SetNoValid(0, CPoint());
             break;
         default:
             GetParent()->OnCmdMsg(Id, 0, NULL, NULL);
@@ -750,8 +735,6 @@ const AFX_MSGMAP* PASCAL CEditNFlow<T, ShNotValue>::GetThisMessageMap()
         ON_CONTROL_REFLECT(EN_KILLFOCUS, OnEnKillfocus)
         ON_WM_KEYDOWN()
         ON_WM_RBUTTONDOWN()
-        ON_WM_RBUTTONDBLCLK()
-        ON_WM_TIMER()
 END_MESSAGE_MAP()
 
 
