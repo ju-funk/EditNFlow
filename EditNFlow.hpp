@@ -138,12 +138,12 @@ public:
     {
         if constexpr (ShNotValue)
         {
-            ValueVaild = ValueSet = false;
+            ValueVaild = NoVaildValueSet = false;
             notSet = _T("---");
         }
         else
         {
-            ValueVaild = ValueSet = true;
+            ValueVaild = NoVaildValueSet = true;
             notSet = _T("");
         }
 
@@ -154,6 +154,10 @@ public:
         myLastValidValue = notSet;
         pCurrentCtl = nullptr;
         Set_MinMax(Min, Max);
+
+        int  ret = GetLocaleInfo(LOCALE_USER_DEFAULT, LOCALE_STHOUSAND, &TousSep, sizeof(TousSep));
+        ret = GetLocaleInfo(LOCALE_USER_DEFAULT, LOCALE_SMONDECIMALSEP, &FlowSep, sizeof(FlowSep));
+        DefFloSep = _T('.');
     }
 
     /*
@@ -190,6 +194,8 @@ public:
     *       When a Mouse or a Context-Menu-Message send to
     *       Parent Window, this Varible has the Sending 
     *       CEditNFlow-Object, when needed
+    * 
+    *       the tip with own template came from perplexity.ai
     */
     template <class TT, bool BT>
     void SendMouseMsgs(bool On = true, CEditNFlow<TT, BT>** pCurrEdit = nullptr)
@@ -212,6 +218,8 @@ public:
     /*
     *  Using the operator= 
     *     from base class CVaildValue
+    * 
+    *   the tip came from perplexity.ai
     */
     using CVaildValue<T>::operator=;
 
@@ -219,10 +227,11 @@ protected:
     typename T Min, Max;
     CString myLastValidValue, notSet;
     DWORD myLastSel;
-    bool myRejectingChange, setReset, ValueSet;
+    bool myRejectingChange, setReset, NoVaildValueSet;
     int MenuRes, MenuSub;
     CEditNFlow<T, ShNotValue>** pCurrentCtl;
     bool bSendMouseMsgs;
+    TCHAR TousSep, FlowSep, DefFloSep;
 
 private:
     CEditNFlow(CEditNFlow const&) = delete;
@@ -236,7 +245,7 @@ private:
         if (!ShowState)
         {
             myLastValidValue = notSet;
-            ValueVaild = ValueSet;
+            ValueVaild = NoVaildValueSet;
         }
 
         if (ValueVaild)
@@ -253,6 +262,8 @@ private:
                 str = _T("%li");    // fallback to long
 
             myLastValidValue.Format(str, Value);
+            if constexpr (std::is_same_v<T, float>)
+                myLastValidValue.Replace(CString(DefFloSep), CString(FlowSep));
         }
         SetLast();
     }
@@ -305,6 +316,131 @@ private:
         }
     }
 
+    CString GetClipBoardStr()
+    {
+        CString str(_T(""));
+        COleDataObject cSource;
+
+        auto convert = [&](CLIPFORMAT cf) -> void
+        {
+            HGLOBAL hData = cSource.GetGlobalData(cf);
+            if (hData == nullptr)
+                return;
+
+            if (cf == CF_TEXT)
+            {
+                char *pData = (char *) ::GlobalLock(hData);
+                str = pData;
+            }
+            else
+            {
+                wchar_t *pData = (wchar_t *) ::GlobalLock(hData);
+                str = pData;
+            }
+
+            ::GlobalUnlock(hData);
+        };
+
+        if (!cSource.AttachClipboard())
+            return str;
+
+        if (cSource.IsDataAvailable(CF_UNICODETEXT))
+            convert(CF_UNICODETEXT);
+        else if(cSource.IsDataAvailable(CF_TEXT))
+            convert(CF_TEXT);
+
+        return str;
+    }
+
+    bool TestPrepareClipStr(T& val)
+    {
+        val = 0;
+        CString str = GetClipBoardStr();
+
+        if constexpr (std::is_same_v<T, float>)
+        {
+            CString str1(str);
+            if(str1.Remove(TousSep) > 1 || str.Find(FlowSep) > -1)
+                str.Remove(TousSep);
+
+            str.Replace(CString(FlowSep), CString(DefFloSep));
+        }
+        else
+        {
+            str.Remove(TousSep);
+
+            int id = str.Find(FlowSep);
+            if(id > 0)
+                str.Delete(id, str.GetLength());
+        }
+
+        return Convert(val, str);
+    }
+
+public:    
+    bool IsPaste(void)
+    {
+        COleDataObject cSource;
+        cSource.AttachClipboard();
+
+        bool ret = cSource.IsDataAvailable(CF_TEXT) || cSource.IsDataAvailable(CF_UNICODETEXT);
+
+        cSource.Release();
+
+        T val;
+        return ret && IsEdit() && TestPrepareClipStr(val);
+    }
+
+    void EditCopy(void)
+    {
+        if (ValueVaild)
+        {
+            CString cStr(myLastValidValue);
+            int stch, ench, len;
+            COleDataSource* pSource = new COleDataSource;
+
+            if constexpr (std::is_same_v<T, float>)
+                cStr.Replace(CString(FlowSep), CString(DefFloSep));
+
+            GetSel(stch, ench);
+            len = ench - stch;
+            if (len > 0)
+                cStr = myLastValidValue.Mid(stch, len);
+            else
+                len = cStr.GetLength();
+            ++len;
+
+            HGLOBAL	hMem = ::GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE | GMEM_ZEROINIT, len * sizeof(TCHAR));
+            if (hMem != nullptr)
+            {
+                TCHAR* pchData = (TCHAR*)GlobalLock(hMem);
+                if (pchData != nullptr)
+                {
+                    CString::CopyChars(pchData, len, cStr.GetBuffer(), len - 1);
+                    ::GlobalUnlock(hMem);
+
+                    pSource->CacheGlobalData(sizeof(TCHAR) == 2 ? CF_UNICODETEXT : CF_TEXT, hMem);
+                    pSource->SetClipboard();
+                }
+                else
+                {
+                    ::GlobalUnlock(hMem);
+                    delete pSource;
+                }
+            }
+            else
+                delete pSource;
+        }
+    }
+
+    void EditPaste(void)
+    {
+        T val;
+
+        if (IsEdit() && TestPrepareClipStr(val))
+            SetValue(val, true);
+    }
+
 protected:
     void OnUpdate()
     {
@@ -319,14 +455,9 @@ protected:
                 return;
             }
 
-            LPTSTR aEndPtr = nullptr;
-
-            errno = 0;
 
             T value;
-            Convert(value, aValue, &aEndPtr);
-
-            if (!(*aEndPtr) && errno != ERANGE)
+            if (Convert(value, aValue))
             {
                 if (value < Min)
                     SetValue(Min, true);
@@ -340,16 +471,24 @@ protected:
         }
     }
 
-    void Convert(T &val, wchar_t const* _String, wchar_t** _EndPtr)
+    bool Convert(T &val, CString &_String)
     {
+        LPTSTR _EndPtr = nullptr;
+        errno = 0;
+
         if constexpr (std::is_same_v<T, float>)
-            val = _tcstof(_String, _EndPtr);
+        {
+            _String.Replace(CString(FlowSep), CString(DefFloSep));
+            val = _tcstof(_String, &_EndPtr);
+        }
         else if constexpr (std::is_same_v<T, LONGLONG>)
-            val = _tcstoi64(_String, _EndPtr, 10);
+            val = _tcstoi64(_String, &_EndPtr, 10);
         else if constexpr (std::is_same_v<T, ULONGLONG>)
-            val = _tcstoui64(_String, _EndPtr, 10);
+            val = _tcstoui64(_String, &_EndPtr, 10);
         else
-            val = wcstoul(_String, _EndPtr, 10);
+            val = wcstoul(_String, &_EndPtr, 10);
+
+        return (!(*_EndPtr) && errno != ERANGE);
     }
 
     bool IsEdit()
@@ -419,6 +558,8 @@ protected:
     {
         if (!ValueVaild && IsEdit())
             SetValue(Value, false);
+        else if(ValueVaild)
+            SetSel(0);
     }
 
     afx_msg void OnRButtonDown(UINT nFlags, CPoint point)
