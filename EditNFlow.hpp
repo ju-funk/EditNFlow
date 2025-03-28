@@ -28,7 +28,7 @@ public:
         Value      = 0;
     }
 
-/* 
+    /*
     *   Get only the current value back
     *    - return T
 
@@ -189,7 +189,9 @@ public:
     *   Set Variable for the Current CEditNFlow-Object
     *    - On
     *       true  : send Mouse Messages to the Parent Window
+    *               but not send the Right-Button-Down 
     *       false : not Send Mouse Messages to Parent Window
+    *               but always send the Right-Button-Double
     *    - pcurrEdit
     *       When a Mouse or a Context-Menu-Message send to
     *       Parent Window, this Varible has the Sending 
@@ -232,6 +234,20 @@ protected:
     CEditNFlow<T, ShNotValue>** pCurrentCtl;
     bool bSendMouseMsgs;
     TCHAR TousSep, FlowSep, DefFloSep;
+    enum { My_Copy = 35000, My_Paste };
+    struct tDblClk
+    {
+        tDblClk() : nFlags{ 0 }, Point{ CPoint() } {}
+
+        void Set(UINT nflags, CPoint point)
+        { 
+            nFlags = nflags;
+            Point = point;
+        }
+
+        UINT   nFlags;
+        CPoint Point;
+    } sDblClk;
 
 private:
     CEditNFlow(CEditNFlow const&) = delete;
@@ -377,7 +393,6 @@ private:
         return Convert(val, str);
     }
 
-public:    
     bool IsPaste(void)
     {
         COleDataObject cSource;
@@ -564,26 +579,25 @@ protected:
 
     afx_msg void OnRButtonDown(UINT nFlags, CPoint point)
     {
-        if (MenuRes > 0)
+        sDblClk.Set(nFlags, point);
+        SetTimer(1, GetDoubleClickTime(), nullptr);
+    }
+
+    afx_msg void OnRButtonDblClk(UINT nFlags, CPoint point)
+    {
+        KillTimer(1);
+        
+        if (IsEdit() && !NoVaildValueSet)
         {
-            CMenu men;
-            men.LoadMenuW(MenuRes);
-            CMenu* pmen = men.GetSubMenu(MenuSub);
+            if (ValueVaild)
+                SetValue(Value, false);
 
             SetCurrCtrl(this);
 
-            DisableItems(pmen);
-
-            ClientToScreen(&point);
-            int Id = pmen->TrackPopupMenu(TPM_LEFTALIGN | TPM_RETURNCMD | TPM_NONOTIFY, point.x, point.y, GetParent());
-
-            if(Id > 0)
-                GetParent()->OnCmdMsg(Id, 0, NULL, NULL);
+            GetParent()->SendMessage(WM_RBUTTONDBLCLK, nFlags, MAKELPARAM(point.x, point.y));
 
             SetCurrCtrl();
         }
-        else
-            CEdit::OnRButtonDown(nFlags, point);
     }
 
     virtual BOOL OnWndMsg(UINT message, WPARAM wParam, LPARAM lParam, LRESULT* pResult)  override
@@ -593,13 +607,80 @@ protected:
         {
             SetCurrCtrl(this);
 
-            GetParent()->SendMessage(message, wParam, lParam);
+            if(message != WM_RBUTTONDBLCLK && message != WM_RBUTTONDOWN)
+                GetParent()->SendMessage(message, wParam, lParam);
 
             SetCurrCtrl();
         }
         return CEdit::OnWndMsg(message, wParam, lParam, pResult);
     }
 
+    afx_msg void OnTimer(UINT_PTR nIDEvent)
+    {
+        if (nIDEvent == 1)
+        {
+            KillTimer(1); 
+
+            ShowContextMenu();
+        }
+    }
+
+
+    void ShowContextMenu()
+    {
+        CMenu SubMenu, cMenu;
+
+        if (MenuRes > 0)
+        {
+            cMenu.LoadMenu(MenuRes);
+            SubMenu.Attach(cMenu.GetSubMenu(MenuSub)->m_hMenu);
+       
+            SetCurrCtrl(this);
+       
+            DisableItems(&SubMenu);
+        }
+        else
+        {
+            if (!SubMenu.CreatePopupMenu())
+                return;
+        }
+
+
+        // menue-item: copy
+        UINT nFlags = MF_BYPOSITION | MF_STRING | (ValueVaild ? 0 : MF_GRAYED | MF_DISABLED);
+        SubMenu.InsertMenu(0, nFlags, My_Copy, _T("Copy"));
+     
+        // menue-item: paste
+        nFlags = MF_BYPOSITION | MF_STRING |( IsPaste() ? 0 : MF_GRAYED | MF_DISABLED);
+        SubMenu.InsertMenu(1, nFlags, My_Paste, _T("Paste"));
+     
+        nFlags = MF_BYPOSITION | MF_SEPARATOR;
+        SubMenu.InsertMenu(2, nFlags);
+
+
+        //SubMenu.AppendMenu(ValueVaild ? MF_STRING : MF_GRAYED | MF_DISABLED | MF_STRING, My_Copy, _T("Copy"));
+        //SubMenu.AppendMenu(IsPaste() ? MF_STRING : MF_GRAYED | MF_DISABLED | MF_STRING, My_Paste, _T("Paste"));
+
+
+        ClientToScreen(&sDblClk.Point);
+        int Id = SubMenu.TrackPopupMenu(TPM_LEFTALIGN | TPM_RETURNCMD | TPM_NONOTIFY, sDblClk.Point.x, sDblClk.Point.y, GetParent());
+        switch (Id)
+        {
+        case 0:
+            break;
+        case My_Copy:
+            EditCopy();
+            break;
+        case My_Paste:
+            EditPaste();
+            break;
+        default:
+            GetParent()->OnCmdMsg(Id, 0, NULL, NULL);
+            break;
+        }
+
+        SetCurrCtrl();
+    }
 
 
     void DisableItems(CMenu* pMenu)
@@ -669,6 +750,8 @@ const AFX_MSGMAP* PASCAL CEditNFlow<T, ShNotValue>::GetThisMessageMap()
         ON_CONTROL_REFLECT(EN_KILLFOCUS, OnEnKillfocus)
         ON_WM_KEYDOWN()
         ON_WM_RBUTTONDOWN()
+        ON_WM_RBUTTONDBLCLK()
+        ON_WM_TIMER()
 END_MESSAGE_MAP()
 
 
