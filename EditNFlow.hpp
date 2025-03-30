@@ -185,16 +185,13 @@ public:
 
     /*
     *   Test send this control for 
-         - the Mouse-Message
-         - or Context Menu for COMMAND/COMMAND_UI
+    *    - the Mouse-Message
+    *    - or Context Menu for COMMAND/COMMAND_UI
     *     return
     *       - true  : the mouse-message is from
     *                 this control
     *       - false : mouse-message is not
     *                 from this control
-    * 
-    *      WM_LBUTTONDOWN 
-    *      only using here, handler ignore
     */
     bool IsSendMsg() 
     { 
@@ -249,7 +246,7 @@ public:
     /*
     *   Handling for the Context-Menu
     *    call from Right Mouse Button
-    *     point    : Client coordinate foe show (LEFT-ALIGN)
+    *     point    : Client coordinate for show (LEFT-ALIGN)
     *     pOwnMenu : own Sub-Menu pointer
     */
     bool ShowContextMenu(CPoint point, CMenu *pOwnMenu = nullptr)
@@ -682,20 +679,15 @@ protected:
         {
             CWnd *pPar = GetParent();
 
-            // test exist the Mouse-Handler?
-            if (message != WM_LBUTTONDOWN && message != WM_RBUTTONDOWN)
-            {
-                AFX_CMDHANDLERINFO info;
-                info.pTarget = NULL;
-                bHandler = pPar->OnCmdMsg(0, MAKELONG(0, message), this, &info);
+            // test, exist a Mouse-Handler?
+            bHandler = reinterpret_cast<CEditNFlow *>(pPar)->FindParentMouseHnd(message);
 
-                bSendMouseMsgs = true;
+            bSendMouseMsgs = true;
 
-                if (bHandler)
-                    pPar->SendMessage(message, wParam, lParam);
+            if (bHandler)
+                pPar->SendMessage(message, wParam, lParam);
 
-                bSendMouseMsgs = false;
-            }
+            bSendMouseMsgs = false;
         }
 
         if(!bHandler)
@@ -746,11 +738,27 @@ protected:
         }
     }
 
+    bool FindParentMouseHnd(UINT nMsg)
+    {
+        const AFX_MSGMAP_ENTRY *Entry;
+
+        Entry = GetMessageMap()->lpEntries;
+        while (Entry->nSig != AfxSig_end)
+        {
+            if (Entry->nMessage == nMsg)
+                return true;
+
+            Entry++;
+        }
+
+        return false;
+    }
+
     DECLARE_MESSAGE_MAP()
 };
 
 
-//BEGIN_MESSAGE_MAP((CEditNFlow<T, ShNotValue>), CEdit)
+//BEGIN_TEMPLATE_MESSAGE_MAP(CEditNFlow, T, CEdit)
 PTM_WARNING_DISABLE 
 template <class T, bool ShNotValue>
 const AFX_MSGMAP* CEditNFlow<T, ShNotValue>::GetMessageMap() const
@@ -763,7 +771,7 @@ const AFX_MSGMAP* PASCAL CEditNFlow<T, ShNotValue>::GetThisMessageMap()
     typedef CEditNFlow<T, ShNotValue> ThisClass;
     typedef CEdit TheBaseClass;
     __pragma(warning(push))
-    __pragma(warning(disable: 4640)) /* message maps can only be called by single threaded message pump */
+    __pragma(warning(disable: 4640)) // message maps can only be called by single threaded message pump 
     static const AFX_MSGMAP_ENTRY _messageEntries[] =
     {
         ON_CONTROL_REFLECT(EN_UPDATE, OnUpdate)
