@@ -138,12 +138,12 @@ public:
     {
         if constexpr (ShNotValue)
         {
-            ValueVaild = NoVaildValueSet = false;
+            ValueVaild = VaildValueSet = false;
             notSet = _T("---");
         }
         else
         {
-            ValueVaild = NoVaildValueSet = true;
+            ValueVaild = VaildValueSet = true;
             notSet = _T("");
         }
 
@@ -152,7 +152,6 @@ public:
         myLastSel = 0;
         MenuRes = MenuSub = 0;
         myLastValidValue = notSet;
-        pCurrentCtl = nullptr;
         Set_MinMax(Min, Max);
 
         int  ret = GetLocaleInfo(LOCALE_USER_DEFAULT, LOCALE_STHOUSAND, &TousSep, sizeof(TousSep));
@@ -185,26 +184,21 @@ public:
     }
 
     /*
-    *   Send the Mouse Message to Parent-Dialog,
-    *   Set Variable for the Current CEditNFlow-Object
-    *    - On
-    *       true  : send Mouse Messages to the Parent Window
-    *               but not send the Right-Button-Down 
-    *       false : not Send Mouse Messages to Parent Window
-    *               but always send the Right-Button-Double
-    *    - pcurrEdit
-    *       When a Mouse or a Context-Menu-Message send to
-    *       Parent Window, this Varible has the Sending 
-    *       CEditNFlow-Object, when needed
+    *   Test send this control for 
+         - the Mouse-Message
+         - or Context Menu for COMMAND/COMMAND_UI
+    *     return
+    *       - true  : the mouse-message is from
+    *                 this control
+    *       - false : mouse-message is not
+    *                 from this control
     * 
-    *       the tip with own template came from perplexity.ai
+    *      WM_LBUTTONDOWN 
+    *      only using here, handler ignore
     */
-    template <class TT, bool BT>
-    void SendMouseMsgs(bool On = true, CEditNFlow<TT, BT>** pCurrEdit = nullptr)
-    {
-        bSendMouseMsgs = On;
-        pCurrentCtl = reinterpret_cast<CEditNFlow<T, ShNotValue>**>(pCurrEdit);
-        SetCurrCtrl();
+    bool IsSendMsg() 
+    { 
+        return bSendMouseMsgs;
     }
 
     /*
@@ -225,13 +219,134 @@ public:
     */
     using CVaildValue<T>::operator=;
 
+
+    /*
+    *   Right Mouse Button Handler
+    *    when overwrite you can call
+    */
+    afx_msg void OnRButtonDown(UINT nFlags, CPoint point)
+    {
+        if ((nFlags & MK_CONTROL) == MK_CONTROL)
+            SetNoValid();
+        else
+            ShowContextMenu(point);
+    }
+
+
+    /*
+    *   Set Vaild value to not Valid
+    *    call from Right Mouse Button
+    */
+    void SetNoValid()
+    {
+        if (IsEdit() && !VaildValueSet)
+        {
+            if (ValueVaild)
+                SetValue(Value, false);
+        }
+    }
+
+    /*
+    *   Handling for the Context-Menu
+    *    call from Right Mouse Button
+    *     point    : Client coordinate foe show (LEFT-ALIGN)
+    *     pOwnMenu : own Sub-Menu pointer
+    */
+    bool ShowContextMenu(CPoint point, CMenu *pOwnMenu = nullptr)
+    {
+        CMenu SubMenu, cMenu;
+        
+        if (pOwnMenu == nullptr)
+        {
+
+            if (MenuRes > 0)
+            {
+                if (cMenu.LoadMenu(MenuRes))
+                {
+                    if (cMenu.GetSubMenu(MenuSub) != nullptr)
+                    {
+                        if (SubMenu.Attach(cMenu.GetSubMenu(MenuSub)->m_hMenu))
+                        {
+                            bSendMouseMsgs = true;
+
+                            Send_UI_Command(&SubMenu);
+                        }
+                        else
+                            return false;
+                    }
+                    else 
+                        return false;
+                }
+                else
+                    return false;
+            }
+            else
+            {
+                if (!SubMenu.CreatePopupMenu())
+                    return false;
+
+                bSendMouseMsgs = true;
+            }
+        
+
+            // menue-item: copy
+            UINT ix = 0;
+            UINT nFlags = MF_BYPOSITION | MF_STRING | (ValueVaild ? 0 : MF_GRAYED | MF_DISABLED);
+            SubMenu.InsertMenu(ix++, nFlags, My_Copy, _T("Copy"));
+
+            // menue-item: paste
+            nFlags = MF_BYPOSITION | MF_STRING | (IsPaste() ? 0 : MF_GRAYED | MF_DISABLED);
+            SubMenu.InsertMenu(ix++, nFlags, My_Paste, _T("Paste"));
+
+            if (!VaildValueSet)
+            {
+                nFlags = MF_BYPOSITION | MF_STRING | (ValueVaild ? 0 : MF_GRAYED | MF_DISABLED);
+                SubMenu.InsertMenu(ix++, nFlags, My_SetNoValid, _T("Set to No Value\tCTL-Right-Mouse"));
+            }
+
+            nFlags = MF_BYPOSITION | MF_SEPARATOR;
+            SubMenu.InsertMenu(ix++, nFlags);
+        }
+        else
+            if (SubMenu.Attach(pOwnMenu->m_hMenu))
+            {
+                bSendMouseMsgs = true;
+                Send_UI_Command(&SubMenu);
+            }
+            else
+                return false;
+
+        ClientToScreen(&point);
+        int Id = SubMenu.TrackPopupMenu(TPM_LEFTALIGN | TPM_RETURNCMD | TPM_NONOTIFY, point.x, point.y, GetParent());
+        switch (Id)
+        {
+        case 0:
+            break;
+        case My_Copy:
+            EditCopy();
+            break;
+        case My_Paste:
+            EditPaste();
+            break;
+        case My_SetNoValid:
+            SetNoValid();
+            break;
+        default:
+            GetParent()->OnCmdMsg(Id, 0, NULL, NULL);
+            break;
+        }
+
+        bSendMouseMsgs = false;
+
+        return true;
+    }
+
 protected:
     typename T Min, Max;
     CString myLastValidValue, notSet;
     DWORD myLastSel;
-    bool myRejectingChange, setReset, NoVaildValueSet;
+    bool myRejectingChange, setReset, VaildValueSet;
     int MenuRes, MenuSub;
-    CEditNFlow<T, ShNotValue>** pCurrentCtl;
     bool bSendMouseMsgs;
     TCHAR TousSep, FlowSep, DefFloSep;
     enum { My_Copy = 35000, My_Paste, My_SetNoValid };
@@ -248,7 +363,7 @@ private:
         if (!ShowState)
         {
             myLastValidValue = notSet;
-            ValueVaild = NoVaildValueSet;
+            ValueVaild = VaildValueSet;
         }
 
         if (ValueVaild)
@@ -498,12 +613,6 @@ protected:
         return (GetStyle() & ES_READONLY) == 0 && IsWindowEnabled();
     }
 
-    void SetCurrCtrl(CEditNFlow<T, ShNotValue>* This = nullptr)
-    {
-        if (pCurrentCtl != nullptr)
-            *pCurrentCtl = This;
-    }
-
     afx_msg void OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
     {
         if(!IsEdit())
@@ -564,111 +673,38 @@ protected:
             SetSel(0);
     }
 
-    afx_msg void OnRButtonDown(UINT nFlags, CPoint point)
-    {
-        if((nFlags & MK_CONTROL) == MK_CONTROL)
-            SetNoValid(nFlags, point);
-        else
-            ShowContextMenu(point);
-    }
-
-    void SetNoValid(UINT nFlags, CPoint point)
-    {
-        KillTimer(1);
-        
-        if (IsEdit() && !NoVaildValueSet)
-        {
-            if (ValueVaild)
-                SetValue(Value, false);
-
-            SetCurrCtrl(this);
-
-            GetParent()->SendMessage(WM_RBUTTONDBLCLK, nFlags, MAKELPARAM(point.x, point.y));
-
-            SetCurrCtrl();
-        }
-    }
-
     virtual BOOL OnWndMsg(UINT message, WPARAM wParam, LPARAM lParam, LRESULT* pResult)  override
     {
-        if (bSendMouseMsgs && (m_hWnd != nullptr) &&
+        BOOL bHandler = FALSE;
+
+        if (IsEdit() &&
             ((WM_MOUSEFIRST <= message) && (WM_MOUSELAST >= message)) )
         {
-            SetCurrCtrl(this);
+            CWnd *pPar = GetParent();
 
-            if(message != WM_RBUTTONDBLCLK && message != WM_RBUTTONDOWN)
-                GetParent()->SendMessage(message, wParam, lParam);
+            // test exist the Mouse-Handler?
+            if (message != WM_LBUTTONDOWN && message != WM_RBUTTONDOWN)
+            {
+                AFX_CMDHANDLERINFO info;
+                info.pTarget = NULL;
+                bHandler = pPar->OnCmdMsg(0, MAKELONG(0, message), this, &info);
 
-            SetCurrCtrl();
+                bSendMouseMsgs = true;
+
+                if (bHandler)
+                    pPar->SendMessage(message, wParam, lParam);
+
+                bSendMouseMsgs = false;
+            }
         }
-        return CEdit::OnWndMsg(message, wParam, lParam, pResult);
+
+        if(!bHandler)
+            bHandler = CEdit::OnWndMsg(message, wParam, lParam, pResult);
+        return bHandler;
     }
 
 
-    void ShowContextMenu(CPoint point)
-    {
-        CMenu SubMenu, cMenu;
-
-        if (MenuRes > 0)
-        {
-            cMenu.LoadMenu(MenuRes);
-            SubMenu.Attach(cMenu.GetSubMenu(MenuSub)->m_hMenu);
-       
-            SetCurrCtrl(this);
-       
-            DisableItems(&SubMenu);
-        }
-        else
-        {
-            if (!SubMenu.CreatePopupMenu())
-                return;
-        }
-
-
-        // menue-item: copy
-        UINT ix = 0; 
-        UINT nFlags = MF_BYPOSITION | MF_STRING | (ValueVaild ? 0 : MF_GRAYED | MF_DISABLED);
-        SubMenu.InsertMenu(ix++, nFlags, My_Copy, _T("Copy"));
-     
-        // menue-item: paste
-        nFlags = MF_BYPOSITION | MF_STRING |( IsPaste() ? 0 : MF_GRAYED | MF_DISABLED);
-        SubMenu.InsertMenu(ix++, nFlags, My_Paste, _T("Paste"));
-     
-        if (!NoVaildValueSet)
-        {
-            nFlags = MF_BYPOSITION | MF_STRING | (ValueVaild ? 0 : MF_GRAYED | MF_DISABLED);
-            SubMenu.InsertMenu(ix++, nFlags, My_SetNoValid, _T("Set to No Value\tCTL-Right-Mouse"));
-        }
-
-        nFlags = MF_BYPOSITION | MF_SEPARATOR;
-        SubMenu.InsertMenu(ix++, nFlags);
-
-
-        ClientToScreen(&point);
-        int Id = SubMenu.TrackPopupMenu(TPM_LEFTALIGN | TPM_RETURNCMD | TPM_NONOTIFY, point.x, point.y, GetParent());
-        switch (Id)
-        {
-        case 0:
-            break;
-        case My_Copy:
-            EditCopy();
-            break;
-        case My_Paste:
-            EditPaste();
-            break;
-        case My_SetNoValid:
-            SetNoValid(0, CPoint());
-            break;
-        default:
-            GetParent()->OnCmdMsg(Id, 0, NULL, NULL);
-            break;
-        }
-
-        SetCurrCtrl();
-    }
-
-
-    void DisableItems(CMenu* pMenu)
+    void Send_UI_Command(CMenu* pMenu)
     {
         ENSURE_VALID(pMenu);
 
