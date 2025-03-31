@@ -18,6 +18,13 @@
 //    no Value is set, in this case 
 //    the Value is not valid
 ///////////////////////////////////////////////////////////////////////////////////////////
+/*
+   T should be
+    - long          (not tested)
+    - ULONGLONG
+    - LONGLONG
+    - float
+*/
 template <class T>
 class CVaildValue
 {
@@ -153,6 +160,8 @@ public:
         MenuRes = MenuSub = 0;
         myLastValidValue = notSet;
         Set_MinMax(Min, Max);
+        PrecLen = 2;
+        TT_On   = TRUE;
 
         int  ret = GetLocaleInfo(LOCALE_USER_DEFAULT, LOCALE_STHOUSAND, &TousSep, sizeof(TousSep));
         ret = GetLocaleInfo(LOCALE_USER_DEFAULT, LOCALE_SMONDECIMALSEP, &FlowSep, sizeof(FlowSep));
@@ -161,11 +170,58 @@ public:
 
     /*
     *   Set Min Max values
+    *    update the ToolTip text
     */
     void SetMinMax(T min, T max)
     {
         Min = min;
         Max = max;
+    }
+
+    /*
+    *   Set the Precision Length
+    *    default is 2  123.45
+    */
+    void SetPrecisionLen(int len)
+    {
+        PrecLen = len;
+    }
+
+    /*
+    *   Set Tool Tip Text
+    *    - Add
+    *        true  : own text add before default text
+    *        false : only set the own text
+    *    - Msg
+    *        String own message
+    *    - Title
+    *        set own Title text (Add is only for Msg)
+    * 
+    *    when Msg == "" and Title = nullptr
+    *        disable tool tip
+    */
+    void SetToolTipText(bool Add, const CString& Msg, const CString* Title = nullptr)
+    {
+        if (Title != nullptr)
+            sTT_Title = Title->GetString();
+        else
+            sTT_Title = _T("");
+
+        if (Msg != _T(""))
+        {
+            sTT_AddMsg = _T("");
+            if (Add)
+                sTT_AddMsg = Msg;
+            else
+                sTT_Msg    = Msg;
+        }
+        else
+           sTT_Msg = _T("");
+
+        TT_On = (Msg != _T("") || Title != nullptr);
+
+        if (IsWindow(ToolTip.m_hWnd))
+            ToolTip.Activate(TT_On);
     }
 
     /*
@@ -340,17 +396,198 @@ public:
 
 protected:
     typename T Min, Max;
+    int      PrecLen;
     CString myLastValidValue, notSet;
     DWORD myLastSel;
-    bool myRejectingChange, setReset, VaildValueSet;
+    bool myRejectingChange, setReset, VaildValueSet,
+         bSendMouseMsgs;
     int MenuRes, MenuSub;
     bool bSendMouseMsgs;
     TCHAR TousSep, FlowSep, DefFloSep;
+    CToolTipCtrl ToolTip;
+    BOOL         TT_On;
+    CString      sToolTip, sTT_Title, sTT_Msg, sTT_AddMsg;
+
     enum { My_Copy = 35000, My_Paste, My_SetNoValid };
 
 private:
     CEditNFlow(CEditNFlow const&) = delete;
     CEditNFlow& operator=(CEditNFlow other) = delete;
+
+    CString GetTTS_String(bool Title)
+    {
+        CString tri, triNa, reol, neg;
+
+        if constexpr (ShNotValue)
+        {
+            tri.Format(_T("Tristate means: Show vaules, and show '%s' when no value is set\n%s"), notSet,
+                !IsEdit() ? _T("") : _T("The State 'no value' can you set, when delete all valid characters or\n"
+                    "with CTRL-Right-Mouse-Button, or in the Context-Menu\n"));
+            triNa = _T("Tristate ");
+        }
+
+        if(Min >= 0)
+            neg = _T("");
+        else
+            neg = _T(" - and");
+
+        reol = IsEdit() ? _T("Edit-Input") : _T("Readonly");
+
+        if constexpr (std::is_same_v<T, float>)
+        {
+            if (Title)
+            {
+                CString tit;
+                tit.Format((_T("%sFloating %s")), triNa.GetString(), reol.GetString());
+
+                return sTT_Title.IsEmpty() ? tit : sTT_Title;
+            }
+            else
+            {
+                CString msg, flow, mima;
+
+                mima.Format(_T("Min: %.*f\nMax: %.*f"), PrecLen, Min, PrecLen, Max);
+
+                if(DefFloSep != FlowSep)
+                    flow.Format(_T("%c and %c"), FlowSep, DefFloSep);
+                else
+                    flow.Format(_T("%c"), FlowSep);
+
+                if(IsEdit())
+                    msg.Format(_T("Valid character:%s 0 to 9 and %s\n%s\n%s"), neg.GetString(), flow.GetString(), mima.GetString(), tri.GetString());
+                else
+                    msg = tri;
+
+                sToolTip = sTT_AddMsg + msg;
+
+                return sTT_Msg.IsEmpty() ? sToolTip : sTT_Msg;
+            }
+        }
+        else if constexpr (std::is_same_v<T, LONGLONG>)
+        {
+            if (Title)
+            {
+                CString tit;
+                tit.Format((_T("%sLong Long %s")), triNa, reol);
+
+                return sTT_Title.IsEmpty() ? tit : sTT_Title;
+            }
+            else
+            {
+                CString msg, mima;
+
+                mima.Format(_T("Min:%lli\nMax: %lli"), Min, Max);
+
+                if (IsEdit())
+                    msg.Format(_T("Valid character:%s 0 to 9\n%s\n%s"), neg.GetString(), mima.GetString(), tri.GetString());
+                else
+                    msg = tri;
+
+                sToolTip = sTT_AddMsg + msg;
+
+                return sTT_Msg.IsEmpty() ? sToolTip : sTT_Msg;
+            }
+        }
+        else if constexpr (std::is_same_v<T, ULONGLONG>)
+        {
+            if (Title)
+            {
+                CString tit;
+                tit.Format((_T("%sUnsigned Long Long %s")), triNa.GetString(), reol.GetString());
+
+                return sTT_Title.IsEmpty() ? tit : sTT_Title;
+            }
+            else
+            {
+                CString msg, mima;
+
+                mima.Format(_T("Min:%llu\nMax: %llu"), Min, Max);
+
+                if (IsEdit())
+                    msg.Format(_T("Valid character: 0 to 9\n%s\n%s"), mima.GetString(), tri.GetString());
+                else
+                    msg = tri;
+
+                sToolTip = sTT_AddMsg + msg;
+
+                return sTT_Msg.IsEmpty() ? sToolTip : sTT_Msg;
+            }
+        }
+        else // long
+        {
+            if (Title)
+            {
+                CString tit;
+                tit.Format((_T("%sLong %s")), triNa.GetString(), reol.GetString());
+
+                return sTT_Title.IsEmpty() ? tit : sTT_Title;
+            }
+            else
+            {
+                CString msg, mima;
+
+                mima.Format(_T("Min:%li\nMax: %li"), Min, Max);
+
+                if (IsEdit())
+                    msg.Format(_T("Valid character:%s 0 to 9\n%s\n%s"), neg.GetString(), mima.GetString(), tri.GetString());
+                else
+                    msg = tri;
+
+                sToolTip = sTT_AddMsg + msg;
+
+                return sTT_Msg.IsEmpty() ? sToolTip : sTT_Msg;
+            }
+        }
+
+        return CString();
+    }
+
+
+    afx_msg BOOL OnToolTipNeedText(UINT id, NMHDR* pNMHDR, LRESULT* pResult)
+    {
+        TOOLTIPTEXT* pTTT = (TOOLTIPTEXT*)pNMHDR;
+
+        pTTT->lpszText = (LPTSTR)(LPCTSTR)GetTTS_String(false).GetString();
+
+        ToolTip.SetTipBkColor(RGB(192, 192, 192));
+        ToolTip.SetTipTextColor(RGB(192, 20, 20));
+        ToolTip.SetTitle(TTI_INFO, GetTTS_String(true));
+
+        return TRUE;
+    }
+
+    virtual BOOL PreTranslateMessage(MSG* pMsg) override
+    {
+        if (::IsWindow(ToolTip.m_hWnd) && (pMsg->hwnd == m_hWnd))
+            ToolTip.RelayEvent(pMsg);
+
+        return __super::PreTranslateMessage(pMsg);
+    }
+
+    virtual void PreSubclassWindow() override
+    {
+        __super::PreSubclassWindow();
+        if (!IsWindow(ToolTip.m_hWnd) && ToolTip.Create(this, TTS_ALWAYSTIP | TTS_BALLOON))
+        {
+            TOOLINFO ti;
+            memset(&ti, 0, sizeof(TOOLINFO));
+            ti.cbSize = sizeof(TOOLINFO);
+      
+            ti.hwnd = m_hWnd;
+            ti.uFlags = TTF_IDISHWND;
+            ti.uId = (UINT_PTR)m_hWnd;
+            ti.lpszText = LPSTR_TEXTCALLBACK;
+      
+            if (::SendMessage(ToolTip.m_hWnd, TTM_ADDTOOL, 0, (LPARAM)&ti))
+            {
+                ToolTip.SetMaxTipWidth(SHRT_MAX);
+                ToolTip.SetDelayTime(TTDT_RESHOW, 300);
+                ToolTip.SetDelayTime(TTDT_AUTOPOP, 150000);
+                ToolTip.SetDelayTime(TTDT_INITIAL, 500);
+                ToolTip.Activate(TT_On);
+            }
+        }
+    }
 
 
     virtual void SetValue(T val, bool ShowState) override
@@ -365,10 +602,10 @@ private:
 
         if (ValueVaild)
         {
-            CString str;
+            CString str, last(myLastValidValue);
 
             if constexpr (std::is_same_v<T, float>)
-                str = _T("%.3f");
+                str.Format(_T("%%.%if"), PrecLen);
             else if constexpr (std::is_same_v<T, LONGLONG>)
                 str = _T("%lli");
             else if constexpr (std::is_same_v<T, ULONGLONG>)
@@ -379,6 +616,8 @@ private:
             myLastValidValue.Format(str, Value);
             if constexpr (std::is_same_v<T, float>)
                 myLastValidValue.Replace(CString(DefFloSep), CString(FlowSep));
+            if(last == myLastValidValue)
+                return;
         }
         SetLast();
     }
@@ -411,7 +650,7 @@ private:
     {
         if constexpr (std::is_same_v<T, float>)
         {
-            Min = FLT_MIN;
+            Min = -FLT_MAX;
             Max = FLT_MAX;
         }
         else if constexpr (std::is_same_v<T, LONGLONG>)
@@ -646,6 +885,8 @@ protected:
         case VK_OEM_MINUS:
             if constexpr (std::is_same_v<T, ULONGLONG>) 
                 return;
+            else if(Min >= 0)
+                return;
 
             [[fallthrough]]; // fallthrough is explicit
         default:
@@ -779,6 +1020,7 @@ const AFX_MSGMAP* PASCAL CEditNFlow<T, ShNotValue>::GetThisMessageMap()
         ON_CONTROL_REFLECT(EN_KILLFOCUS, OnEnKillfocus)
         ON_WM_KEYDOWN()
         ON_WM_RBUTTONDOWN()
+        ON_NOTIFY_EX(TTN_NEEDTEXT, 0, OnToolTipNeedText)
 END_MESSAGE_MAP()
 
 
