@@ -20,7 +20,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////
 /*
    T should be
-    - long          (not tested)
+    - long
     - ULONGLONG
     - LONGLONG
     - float
@@ -155,7 +155,8 @@ public:
         }
 
         myRejectingChange = setReset =
-        bSendMouseMsgs = false;
+        bMouseMsgsAct = false;
+        bSend_ENChange = true;
         myLastSel = 0;
         MenuRes = MenuSub = 0;
         myLastValidValue = notSet;
@@ -166,6 +167,28 @@ public:
         int  ret = GetLocaleInfo(LOCALE_USER_DEFAULT, LOCALE_STHOUSAND, &TousSep, sizeof(TousSep));
         ret = GetLocaleInfo(LOCALE_USER_DEFAULT, LOCALE_SMONDECIMALSEP, &FlowSep, sizeof(FlowSep));
         DefFloSep = _T('.');
+    }
+
+
+    /*
+    *   Set new Value in depend of
+    *    - Event_ENChange
+    *        true  : When the value is new or, ValidVal = false
+    *                the EN_CHANGE-Event send to Parent Dialog
+    *        false : When value is new or ValidVal = false 
+    *                the EN_CHANGE-Event is not send to Parent
+    *                for this value, it is only for this call
+    *    - ValidVal
+    *        true  : It display the val
+    *        false : Show the not vaild Value (---)
+    *       when the 'not vaild Vaule' is not set this paramter
+    *       ignore
+    */
+    void SetVal(T val, bool Event_ENChange = true, bool ValidVal = true)
+    {
+        bSend_ENChange = Event_ENChange;
+        if(ValidVal)
+            SetNoValid();
     }
 
     /*
@@ -180,7 +203,7 @@ public:
 
     /*
     *   Set the Precision Length
-    *    default is 2  123.45
+    *    default is 2 e.g. 123.45
     */
     void SetPrecisionLen(int len)
     {
@@ -227,8 +250,6 @@ public:
     /*
     * By Mouse Right Click, can set the own Context-Menu
     * 
-    *   it is not indepent with SendMouseMsgs
-    * 
     *    - menuRes : int ID for the Resource Menu
     *    - menuSub : int ID for the Submenu of the 
     *                Resource Menu
@@ -251,7 +272,7 @@ public:
     */
     bool IsSendMsg() 
     { 
-        return bSendMouseMsgs;
+        return bMouseMsgsAct;
     }
 
     /*
@@ -320,7 +341,7 @@ public:
                     {
                         if (SubMenu.Attach(cMenu.GetSubMenu(MenuSub)->m_hMenu))
                         {
-                            bSendMouseMsgs = true;
+                            bMouseMsgsAct = true;
 
                             Send_UI_Command(&SubMenu);
                         }
@@ -338,7 +359,7 @@ public:
                 if (!SubMenu.CreatePopupMenu())
                     return false;
 
-                bSendMouseMsgs = true;
+                bMouseMsgsAct = true;
             }
         
 
@@ -363,7 +384,7 @@ public:
         else
             if (SubMenu.Attach(pOwnMenu->m_hMenu))
             {
-                bSendMouseMsgs = true;
+                bMouseMsgsAct = true;
                 Send_UI_Command(&SubMenu);
             }
             else
@@ -389,7 +410,7 @@ public:
             break;
         }
 
-        bSendMouseMsgs = false;
+        bMouseMsgsAct = false;
 
         return true;
     }
@@ -400,9 +421,8 @@ protected:
     CString myLastValidValue, notSet;
     DWORD myLastSel;
     bool myRejectingChange, setReset, VaildValueSet,
-         bSendMouseMsgs;
+         bMouseMsgsAct, bSend_ENChange;
     int MenuRes, MenuSub;
-    bool bSendMouseMsgs;
     TCHAR TousSep, FlowSep, DefFloSep;
     CToolTipCtrl ToolTip;
     BOOL         TT_On;
@@ -468,7 +488,7 @@ private:
             if (Title)
             {
                 CString tit;
-                tit.Format((_T("%sLong Long %s")), triNa, reol);
+                tit.Format((_T("%sLong Long %s")), triNa.GetString(), reol.GetString());
 
                 return sTT_Title.IsEmpty() ? tit : sTT_Title;
             }
@@ -911,6 +931,14 @@ protected:
             SetSel(0);
     }
 
+    afx_msg void OnEnChange()
+    {
+        if(bSend_ENChange)
+            GetParent()->SendMessage(WM_COMMAND, MAKEWPARAM(GetDlgCtrlID(), EN_CHANGE), (LPARAM)GetParent()->GetSafeHwnd());
+        else
+            bSend_ENChange = true;
+    }
+
     virtual BOOL OnWndMsg(UINT message, WPARAM wParam, LPARAM lParam, LRESULT* pResult)  override
     {
         BOOL bHandler = FALSE;
@@ -923,12 +951,12 @@ protected:
             // test, exist a Mouse-Handler?
             bHandler = reinterpret_cast<CEditNFlow *>(pPar)->FindParentMouseHnd(message);
 
-            bSendMouseMsgs = true;
+            bMouseMsgsAct = true;
 
             if (bHandler)
                 pPar->SendMessage(message, wParam, lParam);
 
-            bSendMouseMsgs = false;
+            bMouseMsgsAct = false;
         }
 
         if(!bHandler)
@@ -1018,6 +1046,8 @@ const AFX_MSGMAP* PASCAL CEditNFlow<T, ShNotValue>::GetThisMessageMap()
         ON_CONTROL_REFLECT(EN_UPDATE, OnUpdate)
         ON_CONTROL_REFLECT(EN_SETFOCUS, OnEnSetfocus)
         ON_CONTROL_REFLECT(EN_KILLFOCUS, OnEnKillfocus)
+        ON_CONTROL_REFLECT(EN_CHANGE, OnEnChange)
+
         ON_WM_KEYDOWN()
         ON_WM_RBUTTONDOWN()
         ON_NOTIFY_EX(TTN_NEEDTEXT, 0, OnToolTipNeedText)
