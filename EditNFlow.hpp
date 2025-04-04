@@ -41,7 +41,10 @@ public:
 
     *     no test for vaild value, see next operator
     */
-    T GetVal(void) { return Value; }
+    T GetVal(void) const 
+    { 
+        return Value;
+    }
 
     /*
     *   Get the state is value vaild
@@ -66,15 +69,15 @@ public:
     }
 
     /*
-    *   Change valid value 
+    *   Change to not valid value 
     *    - val
     *        true  : set to no vaild value
-    *        false : is forbitten, see next operator
+    *        false : set to no vaild value 
+    *    change to valid, see next operator
     */
     bool operator =(bool val)
     {
-        assert(val == true);
-        SetValue(0, !val);
+        SetValue(0, false);
         return val;
     }
 
@@ -95,7 +98,7 @@ public:
 
     *     no test for vaild value
     */
-    explicit operator T()
+    explicit operator T() const
     {
         return Value;
     }
@@ -140,7 +143,6 @@ template <class T, bool ShNotValue = false>
 class CEditNFlow : public CEdit, public CVaildValue<T>
 {
 public:
-
     CEditNFlow() : CVaildValue()
     {
         if constexpr (ShNotValue)
@@ -161,8 +163,12 @@ public:
         MenuRes = MenuSub = 0;
         myLastValidValue = notSet;
         Set_MinMax(Min, Max);
-        PrecLen = 2;
-        TT_On   = TRUE;
+        PrecLen    = 2;
+        TT_On      = TRUE;
+        IncStp     = 1; 
+        IncStpSh   = 10;
+        IncStpCt   = 100;
+        IncStpShCt = 1000;
 
         int  ret = GetLocaleInfo(LOCALE_USER_DEFAULT, LOCALE_STHOUSAND, &TousSep, sizeof(TousSep));
         ret = GetLocaleInfo(LOCALE_USER_DEFAULT, LOCALE_SMONDECIMALSEP, &FlowSep, sizeof(FlowSep));
@@ -187,8 +193,12 @@ public:
     void SetVal(T val, bool Event_ENChange = true, bool ValidVal = true)
     {
         bSend_ENChange = Event_ENChange;
-        if(ValidVal)
+        if(!ValidVal)
             SetNoValid();
+        else
+            SetValue(val, true);
+
+        bSend_ENChange = true;
     }
 
     /*
@@ -260,6 +270,24 @@ public:
         MenuSub = menuSub;
     }
 
+
+    /*
+    *   Set the Increment/´Decremet steps
+    *
+    *    - incStp     = Step when no other key is press
+    *    - incStpSh   = Step when Shift key is press
+    *    - incStpCt   = Step when Control key is press
+    *    - incStpSHCt = Step when Shift+Control key ist press
+    */
+    void SetIncDecSteps(T incStp, T incStpSh, T incStpCt, T incStpShCt)
+    {
+        IncStp     = incStp;
+        IncStpSh   = incStpSh;
+        IncStpCt   = incStpCt;
+        IncStpShCt = incStpShCt;
+    }
+
+
     /*
     *   Test send this control for 
     *    - the Mouse-Message
@@ -296,7 +324,9 @@ public:
 
     /*
     *   Right Mouse Button Handler
-    *    when overwrite you can call
+    *    - show context menu
+    *    - when Press Control-Key set to 
+    *      'no valid value' when active
     */
     afx_msg void OnRButtonDown(UINT nFlags, CPoint point)
     {
@@ -306,6 +336,27 @@ public:
             ShowContextMenu(point);
     }
 
+    /*
+    *   Mouse Wheel Handler
+    *    - Increment/Decrement Value
+    *    - combine with Shift and/or Control 
+    *    see to SetIncDecSteps
+    */
+    afx_msg BOOL OnMouseWheel(UINT nFlags, short zDelta, CPoint pt)
+    {
+        MSG Msg;
+        memset(&Msg, 0, sizeof(Msg));
+
+        Msg.message = WM_LBUTTONDOWN;
+        Msg.hwnd    = m_hWnd;
+
+        if (::IsWindow(ToolTip.m_hWnd))
+            ToolTip.RelayEvent(&Msg);
+
+        IncDecrement(zDelta > 0);
+
+        return __super::OnMouseWheel(nFlags, zDelta, pt);
+    }
 
     /*
     *   Set Vaild value to not Valid
@@ -313,7 +364,7 @@ public:
     */
     void SetNoValid()
     {
-        if (IsEdit() && !VaildValueSet)
+        if (IsEdit(false) && !VaildValueSet)
         {
             if (ValueVaild)
                 SetValue(Value, false);
@@ -416,7 +467,7 @@ public:
     }
 
 protected:
-    typename T Min, Max;
+    typename T Min, Max, IncStp, IncStpSh, IncStpCt, IncStpShCt;
     int      PrecLen;
     CString myLastValidValue, notSet;
     DWORD myLastSel;
@@ -612,8 +663,6 @@ private:
 
     virtual void SetValue(T val, bool ShowState) override
     {
-        CVaildValue::SetValue(val, ShowState);
-
         if (!ShowState)
         {
             myLastValidValue = notSet;
@@ -623,6 +672,13 @@ private:
         if (ValueVaild)
         {
             CString str, last(myLastValidValue);
+
+            if (val < Min)
+                val = Min;
+            else if (val > Max)
+                val = Max;
+        
+            CVaildValue::SetValue(val, ShowState);
 
             if constexpr (std::is_same_v<T, float>)
                 str.Format(_T("%%.%if"), PrecLen);
@@ -636,9 +692,15 @@ private:
             myLastValidValue.Format(str, Value);
             if constexpr (std::is_same_v<T, float>)
                 myLastValidValue.Replace(CString(DefFloSep), CString(FlowSep));
-            if(last == myLastValidValue)
+            if (last == myLastValidValue)
+            {
+                bSend_ENChange = true;
                 return;
+            }
         }
+        else
+            CVaildValue::SetValue(val, ShowState);
+
         SetLast();
     }
 
@@ -828,17 +890,9 @@ protected:
                 return;
             }
 
-
             T value;
             if (Convert(value, aValue))
-            {
-                if (value < Min)
-                    SetValue(Min, true);
-                else if (value > Max)
-                    SetValue(Max, true);
-                else
-                    SetValue(value, true);
-            }
+                SetValue(value, true);
             else
                 SetValue(Value, true);
         }
@@ -864,9 +918,36 @@ protected:
         return (!(*_EndPtr) && errno != ERANGE);
     }
 
-    bool IsEdit()
+    bool IsEdit(bool ReadOnly = true)
     {
-        return (GetStyle() & ES_READONLY) == 0 && IsWindowEnabled();
+        if(ReadOnly)
+            return m_hWnd != nullptr && IsWindowEnabled() && (GetStyle() & ES_READONLY) == 0;
+
+        return m_hWnd != nullptr && IsWindowEnabled();
+    }
+
+
+    void IncDecrement(bool inc)
+    {
+        int shct = (GetAsyncKeyState(VK_SHIFT  ) & 0x8000) != 0 ? 1 : 0;
+        shct    |= (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0 ? 2 : 0;
+        T stp = IncStp;
+
+        switch (shct)
+        {
+        case 1:
+            stp = IncStpSh;
+            break;
+        case 2:
+            stp = IncStpCt;
+            break;
+        case 3:
+            stp = IncStpShCt;
+            break;
+        }
+
+        Value += inc ? stp : stp * -1;
+        SetValue(Value, true);
     }
 
     afx_msg void OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
@@ -880,8 +961,6 @@ protected:
         case VK_DELETE:
         case VK_LEFT:
         case VK_RIGHT:
-        case VK_UP:
-        case VK_DOWN:
         case VK_END:
         case VK_HOME:
             if (!ValueVaild)
@@ -889,6 +968,11 @@ protected:
                 SetLast(true);
                 return;
             }
+            break;
+
+        case VK_UP:
+        case VK_DOWN:
+            IncDecrement(nChar == VK_UP);
             break;
             
         case VK_RETURN:
@@ -1028,29 +1112,33 @@ protected:
 
 
 //BEGIN_TEMPLATE_MESSAGE_MAP(CEditNFlow, T, CEdit)
-PTM_WARNING_DISABLE 
-template <class T, bool ShNotValue>
-const AFX_MSGMAP* CEditNFlow<T, ShNotValue>::GetMessageMap() const
-{
-    return GetThisMessageMap();
-}
-template <class T, bool ShNotValue>
-const AFX_MSGMAP* PASCAL CEditNFlow<T, ShNotValue>::GetThisMessageMap()
-{
-    typedef CEditNFlow<T, ShNotValue> ThisClass;
-    typedef CEdit TheBaseClass;
-    __pragma(warning(push))
-    __pragma(warning(disable: 4640)) // message maps can only be called by single threaded message pump 
-    static const AFX_MSGMAP_ENTRY _messageEntries[] =
-    {
-        ON_CONTROL_REFLECT(EN_UPDATE, OnUpdate)
-        ON_CONTROL_REFLECT(EN_SETFOCUS, OnEnSetfocus)
-        ON_CONTROL_REFLECT(EN_KILLFOCUS, OnEnKillfocus)
-        ON_CONTROL_REFLECT(EN_CHANGE, OnEnChange)
+#define ENF_TEMPLATE_MESSAGE_MAP(T)                                        \
+PTM_WARNING_DISABLE                                                        \
+template <class T, bool ShNotValue>                                        \
+const AFX_MSGMAP* CEditNFlow<T, ShNotValue>::GetMessageMap() const         \
+{                                                                          \
+    return GetThisMessageMap();                                            \
+}                                                                          \
+template <class T, bool ShNotValue>                                        \
+const AFX_MSGMAP* PASCAL CEditNFlow<T, ShNotValue>::GetThisMessageMap()    \
+{                                                                          \
+    typedef CEditNFlow<T, ShNotValue> ThisClass;                           \
+    typedef CEdit TheBaseClass;                                            \
+    __pragma(warning(push))                                                \
+    __pragma(warning(disable: 4640)) /* message maps single threaded */    \
+    static const AFX_MSGMAP_ENTRY _messageEntries[] =                      \
+    {                                                                      \
 
-        ON_WM_KEYDOWN()
-        ON_WM_RBUTTONDOWN()
-        ON_NOTIFY_EX(TTN_NEEDTEXT, 0, OnToolTipNeedText)
+ENF_TEMPLATE_MESSAGE_MAP(T)
+    ON_CONTROL_REFLECT(EN_UPDATE, OnUpdate)
+    ON_CONTROL_REFLECT(EN_SETFOCUS, OnEnSetfocus)
+    ON_CONTROL_REFLECT(EN_KILLFOCUS, OnEnKillfocus)
+    ON_CONTROL_REFLECT(EN_CHANGE, OnEnChange)
+    ON_NOTIFY_EX(TTN_NEEDTEXT, 0, OnToolTipNeedText)
+
+    ON_WM_KEYDOWN()
+    ON_WM_RBUTTONDOWN()
+    ON_WM_MOUSEWHEEL()
 END_MESSAGE_MAP()
 
 
