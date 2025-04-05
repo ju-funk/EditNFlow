@@ -678,7 +678,7 @@ private:
             else if (val > Max)
                 val = Max;
         
-            CVaildValue::SetValue(val, ShowState);
+            __super::SetValue(val, ShowState);
 
             if constexpr (std::is_same_v<T, float>)
                 str.Format(_T("%%.%if"), PrecLen);
@@ -699,7 +699,7 @@ private:
             }
         }
         else
-            CVaildValue::SetValue(val, ShowState);
+            __super::SetValue(val, ShowState);
 
         SetLast();
     }
@@ -997,7 +997,7 @@ protected:
             break;
         }
 
-        CEdit::OnKeyDown(nChar, nRepCnt, nFlags);
+        __super::OnKeyDown(nChar, nRepCnt, nFlags);
     }
 
 
@@ -1044,7 +1044,7 @@ protected:
         }
 
         if(!bHandler)
-            bHandler = CEdit::OnWndMsg(message, wParam, lParam, pResult);
+            bHandler = __super::OnWndMsg(message, wParam, lParam, pResult);
         return bHandler;
     }
 
