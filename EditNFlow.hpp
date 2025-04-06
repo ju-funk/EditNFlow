@@ -644,11 +644,11 @@ private:
             memset(&ti, 0, sizeof(TOOLINFO));
             ti.cbSize = sizeof(TOOLINFO);
       
-            ti.hwnd = m_hWnd;
+            ti.hwnd = m_hWnd; // in ToolTip.AddTool(this), set here the Parent window
             ti.uFlags = TTF_IDISHWND;
             ti.uId = (UINT_PTR)m_hWnd;
             ti.lpszText = LPSTR_TEXTCALLBACK;
-      
+
             if (::SendMessage(ToolTip.m_hWnd, TTM_ADDTOOL, 0, (LPARAM)&ti))
             {
                 ToolTip.SetMaxTipWidth(SHRT_MAX);
