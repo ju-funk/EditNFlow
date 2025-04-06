@@ -350,10 +350,13 @@ public:
         Msg.message = WM_LBUTTONDOWN;
         Msg.hwnd    = m_hWnd;
 
-        if (::IsWindow(ToolTip.m_hWnd))
-            ToolTip.RelayEvent(&Msg);
+        if (IsEdit())
+        {
+            if (::IsWindow(ToolTip.m_hWnd))
+                ToolTip.RelayEvent(&Msg);
 
-        IncDecrement(zDelta > 0);
+            IncDecrement(zDelta > 0);
+        }
 
         return __super::OnMouseWheel(nFlags, zDelta, pt);
     }
@@ -485,9 +488,10 @@ private:
     CEditNFlow(CEditNFlow const&) = delete;
     CEditNFlow& operator=(CEditNFlow other) = delete;
 
-    CString GetTTS_String(bool Title)
+    CString& GetTTS_String(bool Title)
     {
-        CString tri, triNa, reol, neg;
+        CString tri, triNa, reol, neg, whee;
+        sToolTip.Empty();
 
         if constexpr (ShNotValue)
         {
@@ -503,15 +507,16 @@ private:
             neg = _T(" - and");
 
         reol = IsEdit() ? _T("Edit-Input") : _T("Readonly");
+        whee = _T(" (Inc- or Decement with Mouse Wheel or\n \
+                       Cursor-Up/Down, different steps with shift and/or control)");
 
         if constexpr (std::is_same_v<T, float>)
         {
             if (Title)
             {
-                CString tit;
-                tit.Format((_T("%sFloating %s")), triNa.GetString(), reol.GetString());
+                sToolTip.Format((_T("%sFloating %s")), triNa.GetString(), reol.GetString());
 
-                return sTT_Title.IsEmpty() ? tit : sTT_Title;
+                return sTT_Title.IsEmpty() ? sToolTip : sTT_Title;
             }
             else
             {
@@ -520,12 +525,12 @@ private:
                 mima.Format(_T("Min: %.*f\nMax: %.*f"), PrecLen, Min, PrecLen, Max);
 
                 if(DefFloSep != FlowSep)
-                    flow.Format(_T("%c and %c"), FlowSep, DefFloSep);
+                    flow.Format(_T("%c or %c"), FlowSep, DefFloSep);
                 else
                     flow.Format(_T("%c"), FlowSep);
 
                 if(IsEdit())
-                    msg.Format(_T("Valid character:%s 0 to 9 and %s\n%s\n%s"), neg.GetString(), flow.GetString(), mima.GetString(), tri.GetString());
+                    msg.Format(_T("Valid character:%s 0 to 9 and %s%s\n%s\n%s"), neg.GetString(), flow.GetString(), whee.GetString(), mima.GetString(), tri.GetString());
                 else
                     msg = tri;
 
@@ -538,10 +543,9 @@ private:
         {
             if (Title)
             {
-                CString tit;
-                tit.Format((_T("%sLong Long %s")), triNa.GetString(), reol.GetString());
+                sToolTip.Format((_T("%sLong Long %s")), triNa.GetString(), reol.GetString());
 
-                return sTT_Title.IsEmpty() ? tit : sTT_Title;
+                return sTT_Title.IsEmpty() ? sToolTip : sTT_Title;
             }
             else
             {
@@ -550,7 +554,7 @@ private:
                 mima.Format(_T("Min:%lli\nMax: %lli"), Min, Max);
 
                 if (IsEdit())
-                    msg.Format(_T("Valid character:%s 0 to 9\n%s\n%s"), neg.GetString(), mima.GetString(), tri.GetString());
+                    msg.Format(_T("Valid character:%s 0 to 9%s\n%s\n%s"), neg.GetString(), whee.GetString(), mima.GetString(), tri.GetString());
                 else
                     msg = tri;
 
@@ -563,10 +567,9 @@ private:
         {
             if (Title)
             {
-                CString tit;
-                tit.Format((_T("%sUnsigned Long Long %s")), triNa.GetString(), reol.GetString());
+                sToolTip.Format((_T("%sUnsigned Long Long %s")), triNa.GetString(), reol.GetString());
 
-                return sTT_Title.IsEmpty() ? tit : sTT_Title;
+                return sTT_Title.IsEmpty() ? sToolTip : sTT_Title;
             }
             else
             {
@@ -575,7 +578,7 @@ private:
                 mima.Format(_T("Min:%llu\nMax: %llu"), Min, Max);
 
                 if (IsEdit())
-                    msg.Format(_T("Valid character: 0 to 9\n%s\n%s"), mima.GetString(), tri.GetString());
+                    msg.Format(_T("Valid character: 0 to 9%s\n%s\n\n%s"), whee.GetString(), mima.GetString(), tri.GetString());
                 else
                     msg = tri;
 
@@ -588,10 +591,9 @@ private:
         {
             if (Title)
             {
-                CString tit;
-                tit.Format((_T("%sLong %s")), triNa.GetString(), reol.GetString());
+                sToolTip.Format((_T("%sLong %s")), triNa.GetString(), reol.GetString());
 
-                return sTT_Title.IsEmpty() ? tit : sTT_Title;
+                return sTT_Title.IsEmpty() ? sToolTip : sTT_Title;
             }
             else
             {
@@ -600,7 +602,7 @@ private:
                 mima.Format(_T("Min:%li\nMax: %li"), Min, Max);
 
                 if (IsEdit())
-                    msg.Format(_T("Valid character:%s 0 to 9\n%s\n%s"), neg.GetString(), mima.GetString(), tri.GetString());
+                    msg.Format(_T("Valid character:%s 0 to 9%s\n%s\n%s"), neg.GetString(), whee.GetString(), mima.GetString(), tri.GetString());
                 else
                     msg = tri;
 
@@ -610,19 +612,19 @@ private:
             }
         }
 
-        return CString();
+        return sToolTip;
     }
 
 
     afx_msg BOOL OnToolTipNeedText(UINT id, NMHDR* pNMHDR, LRESULT* pResult)
     {
-        TOOLTIPTEXT* pTTT = (TOOLTIPTEXT*)pNMHDR;
+        LPNMTTDISPINFO pTTT = (LPNMTTDISPINFO)pNMHDR;
 
-        pTTT->lpszText = (LPTSTR)(LPCTSTR)GetTTS_String(false).GetString();
+        ToolTip.SetTitle(TTI_INFO, GetTTS_String(true));
+        pTTT->lpszText = const_cast<LPTSTR>(GetTTS_String(false).GetString());
 
         ToolTip.SetTipBkColor(RGB(192, 192, 192));
         ToolTip.SetTipTextColor(RGB(192, 20, 20));
-        ToolTip.SetTitle(TTI_INFO, GetTTS_String(true));
 
         return TRUE;
     }
@@ -881,18 +883,18 @@ protected:
     {
         if (!myRejectingChange)
         {
-            CString aValue;
-            GetWindowText(aValue);
-            if (aValue.IsEmpty())
+            CString sValue;
+            GetWindowText(sValue);
+            if (sValue.IsEmpty())
             {
                 setReset = true;
                 SetValue(Value, false);
                 return;
             }
 
-            T value;
-            if (Convert(value, aValue))
-                SetValue(value, true);
+            T val;
+            if (Convert(val, sValue))
+                SetValue(val, true);
             else
                 SetValue(Value, true);
         }
@@ -994,6 +996,8 @@ protected:
 
             [[fallthrough]]; // fallthrough is explicit
         default:
+            if (!ValueVaild)
+                SetLast(true);
             break;
         }
 
