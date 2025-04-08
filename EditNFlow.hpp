@@ -156,9 +156,9 @@ public:
             notSet = _T("");
         }
 
-        myRejectingChange = setReset =
-        bMouseMsgsAct = false;
-        bSend_ENChange = true;
+        myRejectingChange = 
+        bMouseMsgsAct     = false;
+        bSend_ENChange    = true;
         myLastSel = 0;
         MenuRes = MenuSub = 0;
         myLastValidValue = notSet;
@@ -331,7 +331,10 @@ public:
     afx_msg void OnRButtonDown(UINT nFlags, CPoint point)
     {
         if ((nFlags & MK_CONTROL) == MK_CONTROL)
-            SetNoValid();
+        {
+            if(IsEdit())
+                SetNoValid();
+        }
         else
             ShowContextMenu(point);
     }
@@ -426,7 +429,7 @@ public:
             nFlags = MF_BYPOSITION | MF_STRING | (IsPaste() ? 0 : MF_GRAYED | MF_DISABLED);
             SubMenu.InsertMenu(ix++, nFlags, My_Paste, _T("Paste"));
 
-            if (!VaildValueSet)
+            if (!VaildValueSet && IsEdit())
             {
                 nFlags = MF_BYPOSITION | MF_STRING | (ValueVaild ? 0 : MF_GRAYED | MF_DISABLED);
                 SubMenu.InsertMenu(ix++, nFlags, My_SetNoValid, _T("Set to No Value\tCTL-Right-Mouse"));
@@ -474,7 +477,7 @@ protected:
     int      PrecLen;
     CString myLastValidValue, notSet;
     DWORD myLastSel;
-    bool myRejectingChange, setReset, VaildValueSet,
+    bool myRejectingChange, VaildValueSet,
          bMouseMsgsAct, bSend_ENChange;
     int MenuRes, MenuSub;
     TCHAR TousSep, FlowSep, DefFloSep;
@@ -670,6 +673,8 @@ private:
             myLastValidValue = notSet;
             ValueVaild = VaildValueSet;
         }
+        else
+            ValueVaild = true;
 
         if (ValueVaild)
         {
@@ -680,7 +685,7 @@ private:
             else if (val > Max)
                 val = Max;
         
-            __super::SetValue(val, ShowState);
+            Value = val;
 
             if constexpr (std::is_same_v<T, float>)
                 str.Format(_T("%%.%if"), PrecLen);
@@ -701,7 +706,7 @@ private:
             }
         }
         else
-            __super::SetValue(val, ShowState);
+            __super::SetValue(val, ValueVaild);
 
         SetLast();
     }
@@ -712,20 +717,17 @@ private:
         if (::IsWindow(m_hWnd))
         {
             if (reset)
-                myLastValidValue = _T("");
-            else
             {
-                if (setReset)
-                    myLastSel = !ValueVaild ? 0x10000000 : 0x00010001;
-                else
-                    myLastSel = myLastValidValue == notSet ? 0x10000000 : GetSel();
-                setReset = !ValueVaild;
+                myLastValidValue = _T("");
+                myLastSel        = 0x00010001;
             }
+            else
+                myLastSel = myLastValidValue == notSet ? 0x10000000 : GetSel();
+
             myRejectingChange = true;
             SetWindowText(myLastValidValue);
             myRejectingChange = false;
-            if (!reset)
-                SetSel(myLastSel);
+            SetSel(myLastSel);
         }
     }
 
@@ -887,8 +889,8 @@ protected:
             GetWindowText(sValue);
             if (sValue.IsEmpty())
             {
-                setReset = true;
-                SetValue(Value, false);
+                ValueVaild = VaildValueSet;
+                SetLast(true);
                 return;
             }
 
