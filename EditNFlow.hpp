@@ -153,7 +153,7 @@ public:
         else
         {
             ValueVaild = VaildValueSet = true;
-            notSet = _T("");
+            notSet.Empty();
         }
 
         myRejectingChange = 
@@ -238,20 +238,20 @@ public:
         if (Title != nullptr)
             sTT_Title = Title->GetString();
         else
-            sTT_Title = _T("");
+            sTT_Title.Empty();
 
-        if (Msg != _T(""))
+        if (!Msg.IsEmpty())
         {
-            sTT_AddMsg = _T("");
+            sTT_AddMsg.Empty();
             if (Add)
                 sTT_AddMsg = Msg;
             else
                 sTT_Msg    = Msg;
         }
         else
-           sTT_Msg = _T("");
+           sTT_Msg.Empty();
 
-        TT_On = (Msg != _T("") || Title != nullptr);
+        TT_On = (!Msg.IsEmpty() || Title != nullptr);
 
         if (IsWindow(ToolTip.m_hWnd))
             ToolTip.Activate(TT_On);
@@ -505,7 +505,7 @@ private:
         }
 
         if(Min >= 0)
-            neg = _T("");
+            neg.Empty();
         else
             neg = _T(" - and");
 
@@ -718,7 +718,7 @@ private:
         {
             if (reset)
             {
-                myLastValidValue = _T("");
+                myLastValidValue.Empty();
                 myLastSel        = 0x00010001;
             }
             else
@@ -758,8 +758,9 @@ private:
 
     CString GetClipBoardStr()
     {
-        CString str(_T(""));
+        CString str;
         COleDataObject cSource;
+        str.Empty();
 
         auto convert = [&](CLIPFORMAT cf) -> void
         {
