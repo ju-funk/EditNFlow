@@ -165,6 +165,7 @@ public:
         Set_MinMax(Min, Max);
         PrecLen    = 2;
         TT_On      = TRUE;
+        TT_Short   = FALSE;
         IncStp     = 1; 
         IncStpSh   = 10;
         IncStpCt   = 100;
@@ -431,11 +432,10 @@ public:
     */
     bool ShowContextMenu(CPoint point, CMenu *pOwnMenu = nullptr)
     {
-        CMenu SubMenu, cMenu;
+        CMenu SubMenu, cMenu, SubTool;
         
         if (pOwnMenu == nullptr)
         {
-
             if (MenuRes > 0)
             {
                 if (cMenu.LoadMenu(MenuRes))
@@ -465,24 +465,41 @@ public:
                 bMouseMsgsAct = true;
             }
         
+            auto getNFlag = [](bool state, UINT ntrue = 0, UINT nfalse = MF_GRAYED | MF_DISABLED) -> UINT
+            {
+                UINT fl = MF_BYPOSITION;
+                if(ntrue == 0)
+                    fl |= MF_STRING;
+                if(state)
+                    fl |= ntrue;
+                else
+                    fl |= nfalse;
+
+                return fl;
+            };
+
 
             // menue-item: copy
             UINT ix = 0;
-            UINT nFlags = MF_BYPOSITION | MF_STRING | (ValueVaild ? 0 : MF_GRAYED | MF_DISABLED);
-            SubMenu.InsertMenu(ix++, nFlags, My_Copy, _T("Copy"));
+            SubMenu.InsertMenu(ix++, getNFlag(ValueVaild), My_Copy, _T("Copy"));
 
             // menue-item: paste
-            nFlags = MF_BYPOSITION | MF_STRING | (IsPaste() ? 0 : MF_GRAYED | MF_DISABLED);
-            SubMenu.InsertMenu(ix++, nFlags, My_Paste, _T("Paste"));
+            SubMenu.InsertMenu(ix++, getNFlag(IsPaste()), My_Paste, _T("Paste"));
 
             if (!VaildValueSet && IsEdit())
+                SubMenu.InsertMenu(ix++, getNFlag(ValueVaild), My_SetNoValid, _T("Set to No Value\tCTL-Right-Mouse"));
+
+            if (SubTool.CreatePopupMenu())
             {
-                nFlags = MF_BYPOSITION | MF_STRING | (ValueVaild ? 0 : MF_GRAYED | MF_DISABLED);
-                SubMenu.InsertMenu(ix++, nFlags, My_SetNoValid, _T("Set to No Value\tCTL-Right-Mouse"));
+                SubTool.InsertMenu(0, MF_BYPOSITION | MF_STRING, My_TT_Short, _T("Switch Short Tooltip On/Off"));
+                SubTool.CheckMenuItem(0, getNFlag(TT_Short, MF_CHECKED, MF_UNCHECKED));
+                SubTool.InsertMenu(1, MF_BYPOSITION | MF_STRING, My_TT_Toggle, _T("Switch Tooltip On/Off"));
+                SubTool.CheckMenuItem(1, getNFlag(TT_On, MF_CHECKED, MF_UNCHECKED));
+
+                SubMenu.InsertMenu(ix++, MF_BYPOSITION | MF_STRING | MF_POPUP, (UINT_PTR)SubTool.m_hMenu, _T("ToolTip"));
             }
 
-            nFlags = MF_BYPOSITION | MF_SEPARATOR;
-            SubMenu.InsertMenu(ix++, nFlags);
+            SubMenu.InsertMenu(ix++, MF_BYPOSITION | MF_SEPARATOR);
         }
         else
             if (SubMenu.Attach(pOwnMenu->m_hMenu))
@@ -508,6 +525,13 @@ public:
         case My_SetNoValid:
             SetNoValid();
             break;
+        case My_TT_Short:
+            TT_Short = !TT_Short;
+            break;
+        case My_TT_Toggle:
+            TT_On = !TT_On;
+            ToolTip.Activate(TT_On);
+            break;
         default:
             GetParent()->OnCmdMsg(Id, 0, NULL, NULL);
             break;
@@ -529,13 +553,14 @@ protected:
     int MenuRes, MenuSub;
     TCHAR TousSep, FlowSep, DefFloSep;
     CToolTipCtrl ToolTip;
-    BOOL         TT_On;
+    BOOL         TT_On, TT_Short;
     CString      sToolTip, sTT_Title, sTT_Msg, sTT_AddMsg;
     COLORREF     clText, clBack, clTextRO, clBackRO,
                  clTextNV, clBackNV;
     CBrush       retBrush;
 
-    enum { My_Copy = 35000, My_Paste, My_SetNoValid };
+
+    enum { My_Copy = 35000, My_Paste, My_SetNoValid, My_TT_Short, My_TT_Toggle };
 
 private:
     CEditNFlow(CEditNFlow const&) = delete;
@@ -560,13 +585,20 @@ private:
             neg = _T(" - and");
 
         reol = IsEdit() ? _T("Edit-Input") : _T("Readonly");
-        whee = _T(" (Inc- or Decement with Mouse Wheel or\n \
+        if (!TT_Short)
+            whee = _T(" (Inc- or Decement with Mouse Wheel or\n \
                        Cursor-Up/Down, different steps with shift and/or control)");
 
         if constexpr (std::is_same_v<T, float>)
         {
             if (Title)
             {
+                if (TT_Short)
+                {
+                    sToolTip.Empty();
+                    return sToolTip;
+                }
+
                 sToolTip.Format((_T("%sFloating %s")), triNa.GetString(), reol.GetString());
 
                 return sTT_Title.IsEmpty() ? sToolTip : sTT_Title;
@@ -582,10 +614,15 @@ private:
                 else
                     flow.Format(_T("%c"), FlowSep);
 
-                if(IsEdit())
-                    msg.Format(_T("Valid character:%s 0 to 9 and %s%s\n%s\n%s"), neg.GetString(), flow.GetString(), whee.GetString(), mima.GetString(), tri.GetString());
+                if (!TT_Short)
+                {
+                    if (IsEdit())
+                        msg.Format(_T("Valid character:%s 0 to 9 and %s%s\n%s\n%s"), neg.GetString(), flow.GetString(), whee.GetString(), mima.GetString(), tri.GetString());
+                    else
+                        msg = tri;
+                }
                 else
-                    msg = tri;
+                    msg = mima;
 
                 sToolTip = sTT_AddMsg + msg;
 
@@ -596,6 +633,12 @@ private:
         {
             if (Title)
             {
+                if (TT_Short)
+                {
+                    sToolTip.Empty();
+                    return sToolTip;
+                }
+
                 sToolTip.Format((_T("%sLong Long %s")), triNa.GetString(), reol.GetString());
 
                 return sTT_Title.IsEmpty() ? sToolTip : sTT_Title;
@@ -606,10 +649,15 @@ private:
 
                 mima.Format(_T("Min:%lli\nMax: %lli"), Min, Max);
 
-                if (IsEdit())
-                    msg.Format(_T("Valid character:%s 0 to 9%s\n%s\n%s"), neg.GetString(), whee.GetString(), mima.GetString(), tri.GetString());
+                if (!TT_Short)
+                {
+                    if (IsEdit())
+                        msg.Format(_T("Valid character:%s 0 to 9%s\n%s\n%s"), neg.GetString(), whee.GetString(), mima.GetString(), tri.GetString());
+                    else
+                        msg = tri;
+                }
                 else
-                    msg = tri;
+                    msg = mima;
 
                 sToolTip = sTT_AddMsg + msg;
 
@@ -620,6 +668,12 @@ private:
         {
             if (Title)
             {
+                if (TT_Short)
+                {
+                    sToolTip.Empty();
+                    return sToolTip;
+                }
+
                 sToolTip.Format((_T("%sUnsigned Long Long %s")), triNa.GetString(), reol.GetString());
 
                 return sTT_Title.IsEmpty() ? sToolTip : sTT_Title;
@@ -630,10 +684,15 @@ private:
 
                 mima.Format(_T("Min:%llu\nMax: %llu"), Min, Max);
 
-                if (IsEdit())
-                    msg.Format(_T("Valid character: 0 to 9%s\n%s\n\n%s"), whee.GetString(), mima.GetString(), tri.GetString());
+                if (!TT_Short)
+                {
+                    if (IsEdit())
+                        msg.Format(_T("Valid character: 0 to 9%s\n%s\n\n%s"), whee.GetString(), mima.GetString(), tri.GetString());
+                    else
+                        msg = tri;
+                }
                 else
-                    msg = tri;
+                    msg = mima;
 
                 sToolTip = sTT_AddMsg + msg;
 
@@ -644,6 +703,12 @@ private:
         {
             if (Title)
             {
+                if (TT_Short)
+                {
+                    sToolTip.Empty();
+                    return sToolTip;
+                }
+
                 sToolTip.Format((_T("%sLong %s")), triNa.GetString(), reol.GetString());
 
                 return sTT_Title.IsEmpty() ? sToolTip : sTT_Title;
@@ -654,10 +719,15 @@ private:
 
                 mima.Format(_T("Min:%li\nMax: %li"), Min, Max);
 
-                if (IsEdit())
-                    msg.Format(_T("Valid character:%s 0 to 9%s\n%s\n%s"), neg.GetString(), whee.GetString(), mima.GetString(), tri.GetString());
+                if (!TT_Short)
+                {
+                    if (IsEdit())
+                        msg.Format(_T("Valid character:%s 0 to 9%s\n%s\n%s"), neg.GetString(), whee.GetString(), mima.GetString(), tri.GetString());
+                    else
+                        msg = tri;
+                }
                 else
-                    msg = tri;
+                    msg = mima;
 
                 sToolTip = sTT_AddMsg + msg;
 
@@ -693,7 +763,7 @@ private:
     virtual void PreSubclassWindow() override
     {
         __super::PreSubclassWindow();
-        if (!IsWindow(ToolTip.m_hWnd) && ToolTip.Create(this, TTS_ALWAYSTIP | TTS_BALLOON))
+        if (!IsWindow(ToolTip.m_hWnd) && ToolTip.Create(this, TTS_ALWAYSTIP | TTS_BALLOON | TTS_USEVISUALSTYLE))
         {
             TOOLINFO ti;
             memset(&ti, 0, sizeof(TOOLINFO));
