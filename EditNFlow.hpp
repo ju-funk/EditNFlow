@@ -169,6 +169,13 @@ public:
         IncStpSh   = 10;
         IncStpCt   = 100;
         IncStpShCt = 1000;
+        clText     = ::GetSysColor(COLOR_WINDOW);
+        clBack     = ::GetSysColor(COLOR_BACKGROUND);
+        clTextRO   = ::GetSysColor(COLOR_WINDOWTEXT);
+        clBackRO   = ::GetSysColor(COLOR_3DFACE);;
+        clTextNV   = ::GetSysColor(COLOR_WINDOW);
+        clBackNV   = ::GetSysColor(COLOR_GRAYTEXT);
+        bTrans     = bTransNV = bTransRO = false;
 
         int  ret = GetLocaleInfo(LOCALE_USER_DEFAULT, LOCALE_STHOUSAND, &TousSep, sizeof(TousSep));
         ret = GetLocaleInfo(LOCALE_USER_DEFAULT, LOCALE_SMONDECIMALSEP, &FlowSep, sizeof(FlowSep));
@@ -311,6 +318,45 @@ public:
     {
         if (!pDx->m_bSaveAndValidate)
             SetLast();
+    }
+
+    /*
+    *   Set the Colors
+    * 
+    *    - Id    = which color would be change
+    *              Cl_Normal, Cl_ReadOnly, Cl_NoVaild
+    *    - Txt   = change the text color or set
+    *              CL_NoChange for not change
+    *    - Bkg   = change the background color or set
+    *              CL_NoChange for not change
+    *    - trans = when true it is transparent
+    */
+    enum CL_Indent {Cl_Normal, Cl_ReadOnly, Cl_NoVaild, CL_NoChange = (COLORREF)-1 };
+    void SetColors(CL_Indent Id,  COLORREF Txt, COLORREF Bkg, bool trans = false)
+    {
+        auto setcol = [](COLORREF& scol, COLORREF col) -> void
+        {
+            scol = col == CL_NoChange ? scol : col;
+        };
+
+        switch (Id)
+        {
+        case Cl_Normal:
+            setcol(clText, Txt);
+            setcol(clBack, Bkg);
+            bTrans = trans;
+            break;
+        case Cl_ReadOnly:
+            setcol(clTextRO, Txt);
+            setcol(clBackRO, Bkg);
+            bTransRO  = trans;
+            break;
+        case Cl_NoVaild:
+            setcol(clTextNV, Txt);
+            setcol(clBackNV, Bkg);
+            bTransNV  = trans;
+            break;
+        }
     }
 
     /*
@@ -478,12 +524,16 @@ protected:
     CString myLastValidValue, notSet;
     DWORD myLastSel;
     bool myRejectingChange, VaildValueSet,
-         bMouseMsgsAct, bSend_ENChange;
+         bMouseMsgsAct, bSend_ENChange, 
+         bTrans, bTransNV, bTransRO;
     int MenuRes, MenuSub;
     TCHAR TousSep, FlowSep, DefFloSep;
     CToolTipCtrl ToolTip;
     BOOL         TT_On;
     CString      sToolTip, sTT_Title, sTT_Msg, sTT_AddMsg;
+    COLORREF     clText, clBack, clTextRO, clBackRO,
+                 clTextNV, clBackNV;
+    CBrush       retBrush;
 
     enum { My_Copy = 35000, My_Paste, My_SetNoValid };
 
@@ -1030,6 +1080,50 @@ protected:
             bSend_ENChange = true;
     }
 
+    afx_msg HBRUSH CtlColor(CDC* pDC, UINT nCtlColor)
+    {
+        retBrush.Detach();
+
+        if (IsEdit())
+        {
+            if (ValueVaild)
+            {
+                if(bTrans)
+                    pDC->SetBkMode(TRANSPARENT);
+                else
+                    pDC->SetBkMode(OPAQUE);
+
+                pDC->SetBkColor(clBack);
+                pDC->SetTextColor(clText);
+                retBrush.CreateSolidBrush(clBack);
+            }
+            else
+            {   // not valid view
+                if(bTransNV)
+                    pDC->SetBkMode(TRANSPARENT);
+                else
+                    pDC->SetBkMode(OPAQUE);
+
+                pDC->SetBkColor(clBackNV);
+                pDC->SetTextColor(clTextNV);
+                retBrush.CreateSolidBrush(clBackNV);
+            }
+        }
+        else
+        {   // readonly
+            if(bTransRO)
+                pDC->SetBkMode(TRANSPARENT);
+            else
+                pDC->SetBkMode(OPAQUE);
+
+            pDC->SetBkColor(clBackRO);
+            pDC->SetTextColor(clTextRO);
+            retBrush.CreateSolidBrush(clBackRO);
+        }
+
+        return (HBRUSH)retBrush;
+    }
+
     virtual BOOL OnWndMsg(UINT message, WPARAM wParam, LPARAM lParam, LRESULT* pResult)  override
     {
         BOOL bHandler = FALSE;
@@ -1141,6 +1235,7 @@ ENF_TEMPLATE_MESSAGE_MAP(T)
     ON_CONTROL_REFLECT(EN_SETFOCUS, OnEnSetfocus)
     ON_CONTROL_REFLECT(EN_KILLFOCUS, OnEnKillfocus)
     ON_CONTROL_REFLECT(EN_CHANGE, OnEnChange)
+    ON_WM_CTLCOLOR_REFLECT()
     ON_NOTIFY_EX(TTN_NEEDTEXT, 0, OnToolTipNeedText)
 
     ON_WM_KEYDOWN()
