@@ -491,10 +491,10 @@ public:
 
             if (SubTool.CreatePopupMenu())
             {
-                SubTool.InsertMenu(0, MF_BYPOSITION | MF_STRING, My_TT_Short, _T("Switch Short Tooltip On/Off"));
-                SubTool.CheckMenuItem(0, getNFlag(TT_Short, MF_CHECKED, MF_UNCHECKED));
-                SubTool.InsertMenu(1, MF_BYPOSITION | MF_STRING, My_TT_Toggle, _T("Switch Tooltip On/Off"));
-                SubTool.CheckMenuItem(1, getNFlag(TT_On, MF_CHECKED, MF_UNCHECKED));
+                SubTool.InsertMenu(0, MF_BYPOSITION | MF_STRING, My_TT_Toggle, _T("Tooltip"));
+                SubTool.CheckMenuItem(0, getNFlag(TT_On, MF_CHECKED, MF_UNCHECKED));
+                SubTool.InsertMenu(1, MF_BYPOSITION | MF_STRING, My_TT_Short, _T("Short Tooltip"));
+                SubTool.CheckMenuItem(1, getNFlag(TT_Short, MF_CHECKED, MF_UNCHECKED));
 
                 SubMenu.InsertMenu(ix++, MF_BYPOSITION | MF_STRING | MF_POPUP, (UINT_PTR)SubTool.m_hMenu, _T("ToolTip"));
             }
@@ -564,7 +564,7 @@ protected:
 
 private:
     CEditNFlow(CEditNFlow const&) = delete;
-    CEditNFlow& operator=(CEditNFlow other) = delete;
+    CEditNFlow& operator=(CEditNFlow) = delete;
 
     CString& GetTTS_String(bool Title)
     {
