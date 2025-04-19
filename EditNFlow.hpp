@@ -1302,12 +1302,12 @@ const AFX_MSGMAP* PASCAL CEditNFlow<T, ShNotValue>::GetThisMessageMap()    \
     {                                                                      \
 
 ENF_TEMPLATE_MESSAGE_MAP(T)
-    ON_CONTROL_REFLECT(EN_UPDATE, OnUpdate)
-    ON_CONTROL_REFLECT(EN_SETFOCUS, OnEnSetfocus)
+    ON_CONTROL_REFLECT(EN_UPDATE,    OnUpdate)
+    ON_CONTROL_REFLECT(EN_SETFOCUS,  OnEnSetfocus)
     ON_CONTROL_REFLECT(EN_KILLFOCUS, OnEnKillfocus)
-    ON_CONTROL_REFLECT(EN_CHANGE, OnEnChange)
+    ON_CONTROL_REFLECT(EN_CHANGE,    OnEnChange)
+    ON_NOTIFY_EX(TTN_NEEDTEXT, 0,    OnToolTipNeedText)
     ON_WM_CTLCOLOR_REFLECT()
-    ON_NOTIFY_EX(TTN_NEEDTEXT, 0, OnToolTipNeedText)
 
     ON_WM_KEYDOWN()
     ON_WM_RBUTTONDOWN()
