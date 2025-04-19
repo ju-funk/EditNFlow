@@ -166,6 +166,7 @@ public:
         PrecLen    = 2;
         TT_On      = TRUE;
         TT_Short   = FALSE;
+        showMinMax = false;
         IncStp     = 1; 
         IncStpSh   = 10;
         IncStpCt   = 100;
@@ -211,12 +212,13 @@ public:
 
     /*
     *   Set Min Max values
-    *    update the ToolTip text
+    *    only show ToolTip when set
     */
     void SetMinMax(T min, T max)
     {
         Min = min;
         Max = max;
+        showMinMax = true;
     }
 
     /*
@@ -236,7 +238,9 @@ public:
     *    - Msg
     *        String own message
     *    - Title
-    *        set own Title text (Add is only for Msg)
+    *        set own Title text
+    *        when Add=false and Title=nullptr then no title
+    *         but it can switch over context menu
     * 
     *    when Msg == "" and Title = nullptr
     *        disable tool tip
@@ -246,7 +250,10 @@ public:
         if (Title != nullptr)
             sTT_Title = Title->GetString();
         else
+        {
             sTT_Title.Empty();
+            TT_Short = !Add;
+        }
 
         if (!Msg.IsEmpty())
         {
@@ -547,7 +554,7 @@ protected:
     int      PrecLen;
     CString myLastValidValue, notSet;
     DWORD myLastSel;
-    bool myRejectingChange, VaildValueSet,
+    bool myRejectingChange, VaildValueSet, showMinMax,
          bMouseMsgsAct, bSend_ENChange, 
          bTrans, bTransNV, bTransRO;
     int MenuRes, MenuSub;
@@ -607,7 +614,8 @@ private:
             {
                 CString msg, flow, mima;
 
-                mima.Format(_T("Min: %.*f\nMax: %.*f"), PrecLen, Min, PrecLen, Max);
+                if(showMinMax && IsEdit())
+                    mima.Format(_T("Min: %.*f\nMax: %.*f"), PrecLen, Min, PrecLen, Max);
 
                 if(DefFloSep != FlowSep)
                     flow.Format(_T("%c or %c"), FlowSep, DefFloSep);
@@ -647,7 +655,8 @@ private:
             {
                 CString msg, mima;
 
-                mima.Format(_T("Min:%lli\nMax: %lli"), Min, Max);
+                if (showMinMax && IsEdit())
+                    mima.Format(_T("Min:%lli\nMax: %lli"), Min, Max);
 
                 if (!TT_Short)
                 {
@@ -681,8 +690,9 @@ private:
             else
             {
                 CString msg, mima;
-
-                mima.Format(_T("Min:%llu\nMax: %llu"), Min, Max);
+                
+                if (showMinMax && IsEdit())
+                    mima.Format(_T("Min:%llu\nMax: %llu"), Min, Max);
 
                 if (!TT_Short)
                 {
@@ -717,7 +727,8 @@ private:
             {
                 CString msg, mima;
 
-                mima.Format(_T("Min:%li\nMax: %li"), Min, Max);
+                if (showMinMax && IsEdit())
+                    mima.Format(_T("Min:%li\nMax: %li"), Min, Max);
 
                 if (!TT_Short)
                 {
