@@ -173,7 +173,7 @@ public:
         clText     = ::GetSysColor(COLOR_WINDOW);
         clBack     = ::GetSysColor(COLOR_BACKGROUND);
         clTextRO   = ::GetSysColor(COLOR_WINDOWTEXT);
-        clBackRO   = ::GetSysColor(COLOR_3DFACE);;
+        clBackRO   = ::GetSysColor(COLOR_GRAYTEXT) + RGB(41, 41, 41);
         clTextNV   = ::GetSysColor(COLOR_WINDOW);
         clBackNV   = ::GetSysColor(COLOR_GRAYTEXT);
         bTrans     = bTransNV = bTransRO = false;
@@ -1154,11 +1154,23 @@ protected:
     {
         retBrush.Detach();
 
-        if (IsEdit())
+
+        if (!ValueVaild)
+        {  // not valid view
+            if(bTransNV)
+                pDC->SetBkMode(TRANSPARENT);
+            else
+                pDC->SetBkMode(OPAQUE);
+
+            pDC->SetBkColor(clBackNV);
+            pDC->SetTextColor(clTextNV);
+            retBrush.CreateSolidBrush(clBackNV);
+        }
+        else
         {
-            if (ValueVaild)
+            if (IsEdit())
             {
-                if(bTrans)
+                if (bTrans)
                     pDC->SetBkMode(TRANSPARENT);
                 else
                     pDC->SetBkMode(OPAQUE);
@@ -1168,27 +1180,16 @@ protected:
                 retBrush.CreateSolidBrush(clBack);
             }
             else
-            {   // not valid view
-                if(bTransNV)
+            {   // readonly
+                if (bTransRO)
                     pDC->SetBkMode(TRANSPARENT);
                 else
                     pDC->SetBkMode(OPAQUE);
 
-                pDC->SetBkColor(clBackNV);
-                pDC->SetTextColor(clTextNV);
-                retBrush.CreateSolidBrush(clBackNV);
+                pDC->SetBkColor(clBackRO);
+                pDC->SetTextColor(clTextRO);
+                retBrush.CreateSolidBrush(clBackRO);
             }
-        }
-        else
-        {   // readonly
-            if(bTransRO)
-                pDC->SetBkMode(TRANSPARENT);
-            else
-                pDC->SetBkMode(OPAQUE);
-
-            pDC->SetBkColor(clBackRO);
-            pDC->SetTextColor(clTextRO);
-            retBrush.CreateSolidBrush(clBackRO);
         }
 
         return (HBRUSH)retBrush;
