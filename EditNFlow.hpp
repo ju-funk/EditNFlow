@@ -162,6 +162,7 @@ public:
         LastSel           = 0;
         MenuRes = MenuSub = 0;
         myLastValidValue  = notSet;
+        LeftRightTab      = -1;
         Set_MinMax(Min, Max);
         PrecLen    = 2;
         TT_On      = TRUE;
@@ -551,7 +552,7 @@ public:
 
 protected:
     typename T Min, Max, IncStp, IncStpSh, IncStpCt, IncStpShCt;
-    int      PrecLen;
+    int      PrecLen, LeftRightTab;
     CString myLastValidValue, notSet;
     DWORD LastSel, CurrSel;
     bool myRejectingChange, VaildValueSet, showMinMax,
@@ -594,7 +595,8 @@ private:
         reol = IsEdit() ? _T("Edit-Input") : _T("Readonly");
         if (!TT_Short)
             whee = _T(" (Inc- or Decement with Mouse Wheel or\n \
-                       Cursor-Up/Down, different steps with shift and/or control)");
+                       Cursor-Up/Down, different steps with shift and/or control)\n \
+                       Cursor-Left/Right at the begin/end change to prev/next control");
 
         if constexpr (std::is_same_v<T, float>)
         {
@@ -1120,34 +1122,54 @@ protected:
 
     afx_msg void OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
     {
-        if(!IsEdit())
-            return;
+        auto CheckNext = [this](bool left) -> bool
+        {
+            CurrSel = GetSel();
+            if (LeftRightTab != CurrSel)
+                LeftRightTab = CurrSel;
+            else
+            {
+                CWnd* nxt = GetParent();
+                if (nxt != nullptr)
+                {
+                    CDialog* dlg = dynamic_cast<CDialog*>(nxt);
+                    if (dlg != nullptr)
+                    {
+                        if(!left)
+                            dlg->NextDlgCtrl();
+                        else
+                            dlg->PrevDlgCtrl();
+                    }
+                    else
+                    {
+                        nxt = nxt->GetNextDlgGroupItem(this, left);
+                        if(nxt != nullptr)
+                            nxt->SetFocus();
+                        else
+                            return false;
+                    }
+
+                    LeftRightTab = -1;
+                    return true;
+                }
+            }
+            return false;
+        };
 
         switch (nChar)
         {
-        case VK_BACK:
-        case VK_DELETE:
-        case VK_LEFT:
-        case VK_RIGHT:
-        case VK_END:
-        case VK_HOME:
-            if (!ValueVaild)
-            {
-                SetLast(true);
-                return;
-            }
-            break;
-
         case VK_UP:
         case VK_DOWN:
-            IncDecrement(nChar == VK_UP);
-            break;
+            if (IsEdit())
+                IncDecrement(nChar == VK_UP);
+            return;
             
         case VK_RETURN:
         case 0x0A:               // Shift+Enter (= linefeed)
         case VK_ESCAPE:
         case VK_TAB:
             break;
+
         case VK_OEM_PERIOD:
         case VK_OEM_COMMA:
             nChar = VK_OEM_PERIOD;
@@ -1160,10 +1182,29 @@ protected:
             else if(Min >= 0)
                 return;
 
-            [[fallthrough]]; // fallthrough is explicit
+            [[fallthrough]]; 
+        case VK_BACK:
+        case VK_DELETE:
+        case VK_END:
+        case VK_HOME:
+
+        case VK_LEFT:
+        case VK_RIGHT:
+            if (nChar == VK_LEFT || nChar == VK_RIGHT)
+                if(CheckNext(nChar == VK_LEFT))
+                    return;
+
+            [[fallthrough]]; 
+
         default:
+            if (!IsEdit())
+                return;
+
             if (!ValueVaild)
+            {
                 SetLast(true);
+                return;
+            }
             break;
         }
 
