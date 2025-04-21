@@ -1082,7 +1082,21 @@ protected:
             break;
         }
 
-        Value += inc ? stp : stp * -1;
+        if constexpr (std::is_same_v<T, ULONGLONG>)
+        {
+            if(Value == 0 && !inc)
+                Value = Max;
+            else
+                Value += inc ? stp : stp * -1;
+        }
+        else
+            Value += inc ? stp : stp * -1;
+
+        if (Value < Min)
+            Value = Max;
+        else if (Value > Max)
+            Value = Min;
+
         SetValue(Value, true);
     }
 
