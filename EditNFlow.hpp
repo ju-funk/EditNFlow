@@ -809,7 +809,7 @@ private:
 
         if (ValueVaild)
         {
-            CString str, last(myLastValidValue);
+            CString str;
 
             if (val < Min)
                 val = Min;
@@ -830,11 +830,6 @@ private:
             myLastValidValue.Format(str, Value);
             if constexpr (std::is_same_v<T, float>)
                 myLastValidValue.Replace(CString(DefFloSep), CString(FlowSep));
-            if (last == myLastValidValue)
-            {
-                bSend_ENChange = true;
-                return;
-            }
         }
         else
             __super::SetValue(val, ValueVaild);
@@ -850,10 +845,10 @@ private:
             if (reset)
             {
                 myLastValidValue.Empty();
-                myLastSel        = 0x00010001;
+                myLastSel = 0x00000000;
             }
-            else
-                myLastSel = myLastValidValue == notSet ? 0x10000000 : GetSel();
+            else if(!myRejectingChange)
+                myLastSel = myLastValidValue == notSet ? 0xFFFF0000 : GetSel();
 
             myRejectingChange = true;
             SetWindowText(myLastValidValue);
@@ -1164,7 +1159,7 @@ protected:
         if (!ValueVaild && IsEdit())
             SetValue(Value, false);
         else if(ValueVaild)
-            SetSel(0);
+            SetSel(-1, 0);;
     }
 
     afx_msg void OnEnChange()
