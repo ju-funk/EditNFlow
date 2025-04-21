@@ -110,7 +110,7 @@ protected:
 
 
 protected:
-    virtual void SetValue(T val, bool ShowState)
+    virtual void SetValue(T val, bool ShowState, bool ErrConvert = false)
     {
         Value = val;
         ValueVaild = ShowState;
@@ -159,9 +159,9 @@ public:
         myRejectingChange = 
         bMouseMsgsAct     = false;
         bSend_ENChange    = true;
-        myLastSel = 0;
+        LastSel           = 0;
         MenuRes = MenuSub = 0;
-        myLastValidValue = notSet;
+        myLastValidValue  = notSet;
         Set_MinMax(Min, Max);
         PrecLen    = 2;
         TT_On      = TRUE;
@@ -553,7 +553,7 @@ protected:
     typename T Min, Max, IncStp, IncStpSh, IncStpCt, IncStpShCt;
     int      PrecLen;
     CString myLastValidValue, notSet;
-    DWORD myLastSel;
+    DWORD LastSel, CurrSel;
     bool myRejectingChange, VaildValueSet, showMinMax,
          bMouseMsgsAct, bSend_ENChange, 
          bTrans, bTransNV, bTransRO;
@@ -797,7 +797,7 @@ private:
     }
 
 
-    virtual void SetValue(T val, bool ShowState) override
+    virtual void SetValue(T val, bool ShowState, bool ErrConvert = false) override
     {
         if (!ShowState)
         {
@@ -834,27 +834,48 @@ private:
         else
             __super::SetValue(val, ValueVaild);
 
-        SetLast();
+        SetLast(false, ErrConvert);
     }
 
 
-    void SetLast(bool reset = false)
+    void SetLast(bool reset = false, bool ErrConvert = false)
     {
-        if (::IsWindow(m_hWnd))
+        if (::IsWindow(m_hWnd) && !myRejectingChange)
         {
+            CString sValue;
+            DWORD cursel = CurrSel;
+
             if (reset)
             {
                 myLastValidValue.Empty();
-                myLastSel = 0x00000000;
+                sValue = _T("+");
+                LastSel = 0x00000000;
             }
-            else if(!myRejectingChange)
-                myLastSel = myLastValidValue == notSet ? 0xFFFF0000 : GetSel();
+            else 
+                GetWindowText(sValue);
 
-            myRejectingChange = true;
-            SetWindowText(myLastValidValue);
-            myRejectingChange = false;
-            SetSel(myLastSel);
+            if (sValue != myLastValidValue)
+            {
+                if(myLastValidValue == notSet)
+                    LastSel = 0xFFFF0000;
+                else if(CurrSel == (DWORD)-1)
+                    LastSel = 0x0000FFFF;
+                else 
+                {
+                    if (ErrConvert)
+                        bSend_ENChange = false;
+
+                    LastSel = CurrSel;
+                }
+
+                myRejectingChange = true;
+                SetWindowText(myLastValidValue);
+                myRejectingChange = false;
+                SetSel(LastSel);
+            }
         }
+
+        CurrSel = (DWORD)-1;
     }
 
 
@@ -1025,7 +1046,7 @@ protected:
             if (Convert(val, sValue))
                 SetValue(val, true);
             else
-                SetValue(Value, true);
+                SetValue(Value, true, true);
         }
     }
 
@@ -1051,10 +1072,12 @@ protected:
 
     bool IsEdit(bool ReadOnly = true)
     {
-        if(ReadOnly)
-            return m_hWnd != nullptr && IsWindowEnabled() && (GetStyle() & ES_READONLY) == 0;
+        bool ret = m_hWnd != nullptr && IsWindowEnabled();
 
-        return m_hWnd != nullptr && IsWindowEnabled();
+        if(ReadOnly)
+            ret = ret && (GetStyle() & ES_READONLY) == 0;
+
+        return ret;
     }
 
 
@@ -1145,6 +1168,7 @@ protected:
         }
 
         __super::OnKeyDown(nChar, nRepCnt, nFlags);
+        CurrSel = GetSel();
     }
 
 
@@ -1158,7 +1182,7 @@ protected:
     {
         if (!ValueVaild && IsEdit())
             SetValue(Value, false);
-        else if(ValueVaild)
+        else
             SetSel(-1, 0);;
     }
 
