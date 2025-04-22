@@ -38,7 +38,7 @@ public:
     /*
     *   Get only the current value back
     *    - return T
-
+    *
     *     no test for vaild value, see next operator
     */
     T GetVal(void) const 
@@ -95,7 +95,7 @@ public:
     /*
     *   CAST Get only the current value back
     *    - return T
-
+    *
     *     no test for vaild value
     */
     explicit operator T() const
@@ -129,15 +129,15 @@ protected:
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 /* 
-   T should be
-    - long          (not tested)
-    - ULONGLONG
-    - LONGLONG
-    - float
-
-   ShNotValue = show not Value
-    - false -> show Values
-    - true  -> when no vaild value, set show to '---'
+*   T should be
+*    - long          (not tested)
+*    - ULONGLONG
+*    - LONGLONG
+*    - float
+*
+*   ShNotValue = show not Value
+*    - false -> show Values
+*    - true  -> when no vaild value, set show to '---'
 */
 template <class T, bool ShNotValue = false>
 class CEditNFlow : public CEdit, public CVaildValue<T>
@@ -161,7 +161,7 @@ public:
         bSend_ENChange    = true;
         LastSel           = 0;
         MenuRes = MenuSub = 0;
-        myLastValidValue  = notSet;
+        LastValidValue  = notSet;
         LeftRightTab      = -1;
         Set_MinMax(Min, Max);
         PrecLen    = 2;
@@ -212,6 +212,40 @@ public:
     }
 
     /*
+    *   Get the current value as CString back
+    *    - return CString
+    *
+    *     no test for vaild value, 
+    *       when not valid get 'notSet'
+    */
+    CString GetString() const
+    {
+        return LastValidValue;
+    }
+
+    /*
+    *   Set the String value 
+    *    - valstr
+    *         Val String to be set
+    *    - return
+    *        - true  : is set
+    *        - false : can not be set
+    *
+    *     when not valid is set, 
+    *      set to vaild, when return true'
+    */
+    bool SetValString(CString &valstr)
+    {
+        T val;
+        bool ret = Convert(val, valstr);
+
+        if(ret)
+            SetValue(val, true);
+
+        return ret;
+    }
+
+   /*
     *   Set Min Max values
     *    only show ToolTip when set
     */
@@ -553,7 +587,7 @@ public:
 protected:
     typename T Min, Max, IncStp, IncStpSh, IncStpCt, IncStpShCt;
     int      PrecLen, LeftRightTab;
-    CString myLastValidValue, notSet;
+    CString LastValidValue, notSet;
     DWORD LastSel, CurrSel;
     bool myRejectingChange, VaildValueSet, showMinMax,
          bMouseMsgsAct, bSend_ENChange, 
@@ -803,7 +837,7 @@ private:
     {
         if (!ShowState)
         {
-            myLastValidValue = notSet;
+            LastValidValue = notSet;
             ValueVaild = VaildValueSet;
         }
         else
@@ -829,9 +863,9 @@ private:
             else
                 str = _T("%li");    // fallback to long
 
-            myLastValidValue.Format(str, Value);
+            LastValidValue.Format(str, Value);
             if constexpr (std::is_same_v<T, float>)
-                myLastValidValue.Replace(CString(DefFloSep), CString(FlowSep));
+                LastValidValue.Replace(CString(DefFloSep), CString(FlowSep));
         }
         else
             __super::SetValue(val, ValueVaild);
@@ -849,16 +883,16 @@ private:
 
             if (reset)
             {
-                myLastValidValue.Empty();
+                LastValidValue.Empty();
                 sValue = _T("+");
                 LastSel = 0x00000000;
             }
             else 
                 GetWindowText(sValue);
 
-            if (sValue != myLastValidValue)
+            if (sValue != LastValidValue)
             {
-                if(myLastValidValue == notSet)
+                if(LastValidValue == notSet)
                     LastSel = 0xFFFF0000;
                 else if(CurrSel == (DWORD)-1)
                     LastSel = 0x0000FFFF;
@@ -871,7 +905,7 @@ private:
                 }
 
                 myRejectingChange = true;
-                SetWindowText(myLastValidValue);
+                SetWindowText(LastValidValue);
                 myRejectingChange = false;
                 SetSel(LastSel);
             }
@@ -984,7 +1018,7 @@ private:
     {
         if (ValueVaild)
         {
-            CString cStr(myLastValidValue);
+            CString cStr(LastValidValue);
             int stch, ench, len;
             COleDataSource* pSource = new COleDataSource;
 
@@ -994,7 +1028,7 @@ private:
             GetSel(stch, ench);
             len = ench - stch;
             if (len > 0)
-                cStr = myLastValidValue.Mid(stch, len);
+                cStr = LastValidValue.Mid(stch, len);
             else
                 len = cStr.GetLength();
             ++len;
