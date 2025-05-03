@@ -1,7 +1,14 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////
-///// I have derived the basic framework from the CNumEdit class                              //
-///// WebPage: https://www.codeguru.com/cplusplus/creating-a-numeric-edit-box/                //
+///// I have derived the basic framework from the CNumEdit class                           /////
+///// WebPage: https://www.codeguru.com/cplusplus/creating-a-numeric-edit-box/             /////
+/////--------------------------------------------------------------------------------------/////
+/// Version 1.0.0                                                                            ///
+/// https://github.com/ju-funk/EditNFlow                                                     ///
+/// Licensed under the MIT License <http://opensource.org/licenses/MIT>.                     ///
+///                                                                                          ///
+/// Copyright (c) 2025 Juergen Funk                                                          ///
 ////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 
 #pragma once
