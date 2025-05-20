@@ -164,6 +164,8 @@ public:
         }
 
         myRejectingChange = 
+        ChangeCR          =
+        EnterEvt          =
         bMouseMsgsAct     = false;
         bSend_ENChange    = true;
         LastSel           = 0;
@@ -210,6 +212,7 @@ public:
     void SetVal(T val, bool Event_ENChange = true, bool ValidVal = true)
     {
         bSend_ENChange = Event_ENChange;
+        EnterEvt       = false;
         if(!ValidVal)
             SetNoValid();
         else
@@ -245,6 +248,8 @@ public:
     {
         T val;
         bool ret = Convert(val, valstr);
+
+        EnterEvt = false;
 
         if(ret)
             SetValue(val, true);
@@ -410,12 +415,16 @@ public:
     }
 
     /*
-    *  Using the operator= 
-    *     from base class CVaildValue
-    * 
-    *   the tip came from perplexity.ai
+    *   Set Value to vaild value
+    *    - val
+    *         set vaild value
     */
-    using CVaildValue<T>::operator=;
+    T operator =(T val)
+    {
+        EnterEvt = false;
+
+        return __super::operator =(val);
+    }
 
 
     /*
@@ -466,10 +475,12 @@ public:
     */
     void SetNoValid()
     {
+        EnterEvt = false;
+
         if (IsEdit(false) && !VaildValueSet)
         {
             if (ValueVaild)
-                SetValue(Value, false);
+                SetValue(0, false);
         }
     }
 
@@ -538,6 +549,10 @@ public:
             if (!VaildValueSet && IsEdit())
                 SubMenu.InsertMenu(ix++, getNFlag(ValueVaild), My_SetNoValid, _T("Set to No Value\tCTL-Right-Mouse"));
 
+            if (IsEdit())
+                SubMenu.InsertMenu(ix++, getNFlag(ChangeCR, MF_CHECKED, MF_UNCHECKED), My_EnterChg, _T("Send input Change event only with Enter"));
+
+
             if (SubTool.CreatePopupMenu())
             {
                 SubTool.InsertMenu(0, MF_BYPOSITION | MF_STRING, My_TT_Toggle, _T("Tooltip"));
@@ -574,6 +589,9 @@ public:
         case My_SetNoValid:
             SetNoValid();
             break;
+        case My_EnterChg:
+            ChangeCR = !ChangeCR;
+            break;
         case My_TT_Short:
             TT_Short = !TT_Short;
             break;
@@ -597,7 +615,7 @@ protected:
     CString LastValidValue, notSet;
     DWORD LastSel, CurrSel;
     bool myRejectingChange, VaildValueSet, showMinMax,
-         bMouseMsgsAct, bSend_ENChange, 
+         bMouseMsgsAct, bSend_ENChange, ChangeCR, EnterEvt,
          bTrans, bTransNV, bTransRO;
     int MenuRes, MenuSub;
     TCHAR TousSep, FlowSep, DefFloSep;
@@ -609,7 +627,7 @@ protected:
     CBrush       retBrush;
 
 
-    enum { My_Copy = 35000, My_Paste, My_SetNoValid, My_TT_Short, My_TT_Toggle };
+    enum { My_Copy = 35000, My_Paste, My_SetNoValid, My_EnterChg, My_TT_Short, My_TT_Toggle };
 
 private:
     CEditNFlow(CEditNFlow const&) = delete;
@@ -811,6 +829,18 @@ private:
         if (::IsWindow(ToolTip.m_hWnd) && (pMsg->hwnd == m_hWnd))
             ToolTip.RelayEvent(pMsg);
 
+        if (pMsg->message == WM_KEYDOWN && pMsg->wParam == VK_RETURN)
+        {
+            if (ChangeCR)
+            {
+                EnterEvt       = false;
+                bSend_ENChange = true;
+                OnEnChange();
+
+                return TRUE;
+            }
+        }
+
         return __super::PreTranslateMessage(pMsg);
     }
 
@@ -917,6 +947,8 @@ private:
                 SetSel(LastSel);
             }
         }
+
+        EnterEvt = false;
 
         CurrSel = (DWORD)-1;
     }
@@ -1090,6 +1122,8 @@ protected:
                 SetValue(val, true);
             else
                 SetValue(Value, true, true);
+
+            EnterEvt = ChangeCR;
         }
     }
 
@@ -1205,12 +1239,6 @@ protected:
                 IncDecrement(nChar == VK_UP);
             return;
             
-        case VK_RETURN:
-        case 0x0A:               // Shift+Enter (= linefeed)
-        case VK_ESCAPE:
-        case VK_TAB:
-            break;
-
         case VK_OEM_PERIOD:
         case VK_OEM_COMMA:
             nChar = VK_OEM_PERIOD;
@@ -1270,10 +1298,13 @@ protected:
 
     afx_msg void OnEnChange()
     {
-        if(bSend_ENChange)
+        if(bSend_ENChange && !EnterEvt)
             GetParent()->SendMessage(WM_COMMAND, MAKEWPARAM(GetDlgCtrlID(), EN_CHANGE), (LPARAM)GetParent()->GetSafeHwnd());
         else
+        {
             bSend_ENChange = true;
+            EnterEvt       = false;
+        }
     }
 
     afx_msg HBRUSH CtlColor(CDC* pDC, UINT nCtlColor)
