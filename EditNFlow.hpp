@@ -415,6 +415,21 @@ public:
     }
 
     /*
+    *   Change to not valid value
+    *    - val
+    *        true  : set to no vaild value
+    *        false : set to no vaild value
+    *    change to valid, see next operator
+    */
+    bool operator =(bool val)
+    {
+        EnterEvt = false;
+
+        return __super::operator =(val);
+    }
+
+
+    /*
     *   Set Value to vaild value
     *    - val
     *         set vaild value
