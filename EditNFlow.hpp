@@ -14,8 +14,6 @@
 #pragma once
 #include "afxdialogex.h"
 #include <type_traits>
-#include "pch.h"
-#include "ViewSDR.h"
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -655,7 +653,7 @@ private:
 
         if constexpr (ShNotValue)
         {
-            tri.Format(_T("Tristate means: Show vaules, and show '%s' when no value is set\n%s"), notSet,
+            tri.Format(_T("Tristate means: Show vaules, and show '%s' when no value is set\n%s"), notSet.GetString(),
                 !IsEdit() ? _T("") : _T("The State 'no value' can you set, when delete all valid characters or\n"
                     "with CTRL-Right-Mouse-Button, or in the Context-Menu\n"));
             triNa = _T("Tristate ");
